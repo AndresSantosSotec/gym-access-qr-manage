@@ -26,6 +26,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { WebcamCaptureModal } from '@/components/WebcamCaptureModal';
 import { clientsService } from '@/services/clients.service';
 import { membershipsService } from '@/services/memberships.service';
 import { accessService } from '@/services/access.service';
@@ -64,6 +65,7 @@ export function ClientDetail() {
   const [isFingerprintDialogOpen, setIsFingerprintDialogOpen] = useState(false);
   const [isRemoveFingerprintOpen, setIsRemoveFingerprintOpen] = useState(false);
   const [isEconomicDialogOpen, setIsEconomicDialogOpen] = useState(false);
+  const [isWebcamOpen, setIsWebcamOpen] = useState(false);
   const [editingEconomicItem, setEditingEconomicItem] = useState<EconomicProfileItem | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
@@ -151,6 +153,14 @@ export function ClientDetail() {
     setClient({ ...client, profilePhoto: undefined });
     setPhotoPreview(null);
     toast.success('Foto eliminada');
+  };
+
+  const handleWebcamCapture = (base64Image: string) => {
+    if (!client) return;
+    setPhotoPreview(base64Image);
+    clientsService.update(client.id, { profilePhoto: base64Image });
+    setClient({ ...client, profilePhoto: base64Image });
+    toast.success('Foto capturada y actualizada');
   };
 
   const handleRegisterFingerprint = () => {
@@ -503,7 +513,7 @@ export function ClientDetail() {
           <Card>
             <CardHeader>
               <CardTitle>Foto de Perfil</CardTitle>
-              <CardDescription>Imagen para identificación visual rápida</CardDescription>
+              <CardDescription>Puedes subir una foto o tomarla con la cámara</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-6">
@@ -519,20 +529,26 @@ export function ClientDetail() {
                   </div>
                 )}
                 <div className="flex-1 space-y-3">
-                  <div>
-                    <Label htmlFor="photo-upload" className="cursor-pointer">
-                      <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
-                        <Camera size={20} weight="bold" />
-                        {photoPreview ? 'Cambiar Foto' : 'Subir Foto'}
-                      </div>
-                    </Label>
-                    <Input
-                      id="photo-upload"
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handlePhotoUpload}
-                    />
+                  <div className="flex gap-2">
+                    <div>
+                      <Label htmlFor="photo-upload" className="cursor-pointer">
+                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
+                          <Camera size={20} weight="bold" />
+                          {photoPreview ? 'Cambiar Foto' : 'Subir Foto'}
+                        </div>
+                      </Label>
+                      <Input
+                        id="photo-upload"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handlePhotoUpload}
+                      />
+                    </div>
+                    <Button onClick={() => setIsWebcamOpen(true)} variant="secondary">
+                      <Camera size={20} weight="bold" className="mr-2" />
+                      Abrir Cámara
+                    </Button>
                   </div>
                   {photoPreview && (
                     <Button onClick={handleRemovePhoto} variant="destructive" size="sm">
@@ -1059,6 +1075,12 @@ export function ClientDetail() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <WebcamCaptureModal
+        open={isWebcamOpen}
+        onClose={() => setIsWebcamOpen(false)}
+        onCapture={handleWebcamCapture}
+      />
     </div>
   );
 }
