@@ -3,39 +3,8 @@ import type { MembershipPlan, Payment } from '@/types/models';
 import { addDays } from '@/utils/date';
 import { clientsService } from './clients.service';
 
-const initializeMockPlans = (): void => {
-  const existingPlans = storage.get<MembershipPlan[]>(STORAGE_KEYS.MEMBERSHIP_PLANS);
-  if (!existingPlans) {
-    const mockPlans: MembershipPlan[] = [
-      {
-        id: 'PLAN-001',
-        name: 'Mensual',
-        price: 250,
-        durationDays: 30,
-        description: 'Acceso completo por 30 días',
-      },
-      {
-        id: 'PLAN-002',
-        name: 'Trimestral',
-        price: 650,
-        durationDays: 90,
-        description: 'Acceso completo por 3 meses - Ahorra Q100',
-      },
-      {
-        id: 'PLAN-003',
-        name: 'Anual',
-        price: 2200,
-        durationDays: 365,
-        description: 'Acceso completo por 1 año - Ahorra Q800',
-      },
-    ];
-    storage.set(STORAGE_KEYS.MEMBERSHIP_PLANS, mockPlans);
-  }
-};
-
 export const membershipsService = {
   getPlans: (): MembershipPlan[] => {
-    initializeMockPlans();
     return storage.get<MembershipPlan[]>(STORAGE_KEYS.MEMBERSHIP_PLANS) || [];
   },
 
@@ -44,10 +13,68 @@ export const membershipsService = {
     return plans.find((p) => p.id === id) || null;
   },
 
+  getPlanBySlug: (slug: string): MembershipPlan | null => {
+    const plans = membershipsService.getPlans();
+    return plans.find((p) => p.slug === slug) || null;
+  },
+
+  getPublishedPlans: (): MembershipPlan[] => {
+    const plans = membershipsService.getPlans();
+    return plans.filter((p) => p.published);
+  },
+
+  createPlan: (plan: Omit<MembershipPlan, 'id' | 'createdAt' | 'updatedAt'>): MembershipPlan => {
+    const now = new Date().toISOString();
+    const newPlan: MembershipPlan = {
+      ...plan,
+      id: `PLAN-${Date.now()}`,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const plans = membershipsService.getPlans();
+    storage.set(STORAGE_KEYS.MEMBERSHIP_PLANS, [...plans, newPlan]);
+    return newPlan;
+  },
+
+  updatePlan: (id: string, updates: Partial<MembershipPlan>): MembershipPlan | null => {
+    const plans = membershipsService.getPlans();
+    const index = plans.findIndex((p) => p.id === id);
+    
+    if (index === -1) return null;
+
+    const updatedPlan = {
+      ...plans[index],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    plans[index] = updatedPlan;
+    storage.set(STORAGE_KEYS.MEMBERSHIP_PLANS, plans);
+    return updatedPlan;
+  },
+
+  deletePlan: (id: string): boolean => {
+    const plans = membershipsService.getPlans();
+    const filtered = plans.filter((p) => p.id !== id);
+    
+    if (filtered.length === plans.length) return false;
+
+    storage.set(STORAGE_KEYS.MEMBERSHIP_PLANS, filtered);
+    return true;
+  },
+
+  togglePublished: (id: string): MembershipPlan | null => {
+    const plan = membershipsService.getPlanById(id);
+    if (!plan) return null;
+
+    return membershipsService.updatePlan(id, { published: !plan.published });
+  },
+
   assignMembership: (
     clientId: string,
     planId: string,
-    paymentMethod: 'cash' | 'card' | 'transfer',
+    paymentMethod: 'cash' | 'card' | 'transfer' | 'stripe',
     amount: number,
     reference?: string
   ): Payment | null => {
@@ -64,6 +91,7 @@ export const membershipsService = {
       method: paymentMethod,
       createdAt: new Date().toISOString(),
       reference,
+      status: 'paid',
     };
 
     const payments = storage.get<Payment[]>(STORAGE_KEYS.PAYMENTS) || [];
