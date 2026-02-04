@@ -3,13 +3,14 @@ import type { AuthState, User } from '@/types/models';
 import { usersService } from './users.service';
 
 const DEMO_USER_USERNAME = 'admin';
+const DEMO_USER_EMAIL = 'admin@demo.com';
 const DEMO_USER_PASSWORD = 'Admin123!';
 
 export const authService = {
-  login: async (username: string, password: string): Promise<AuthState> => {
+  login: async (emailOrUsername: string, password: string): Promise<AuthState> => {
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    if (username === DEMO_USER_USERNAME && password === DEMO_USER_PASSWORD) {
+    if ((emailOrUsername === DEMO_USER_USERNAME || emailOrUsername === DEMO_USER_EMAIL) && password === DEMO_USER_PASSWORD) {
       let demoUser = usersService.getUserByUsername(DEMO_USER_USERNAME);
       
       if (!demoUser) {
