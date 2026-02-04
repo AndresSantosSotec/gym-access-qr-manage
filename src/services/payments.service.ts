@@ -39,7 +39,18 @@ export const paymentsService = {
   getTotalRevenue: (): number => {
     const payments = paymentsService.getAllPayments();
     return payments
-      .filter((p) => p.status === 'paid')
+      .filter((p) => p.status === 'PAID')
       .reduce((sum, p) => sum + p.amount, 0);
+  },
+
+  updatePaymentStatus: (id: string, status: Payment['status']): Payment | null => {
+    const payments = paymentsService.getAllPayments();
+    const index = payments.findIndex((p) => p.id === id);
+    
+    if (index === -1) return null;
+
+    payments[index].status = status;
+    storage.set(STORAGE_KEYS.PAYMENTS, payments);
+    return payments[index];
   },
 };

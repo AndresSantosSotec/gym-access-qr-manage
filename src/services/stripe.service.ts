@@ -53,9 +53,9 @@ export const stripeService = {
       leadId: session.leadId,
       planId: session.planId,
       amount: session.amount,
-      method: 'stripe',
+      method: 'STRIPE',
       reference: sessionId,
-      status: 'paid',
+      status: 'PAID',
       createdAt: new Date().toISOString(),
     };
 
@@ -76,6 +76,19 @@ export const stripeService = {
     }
 
     return payment;
+  },
+
+  createCheckoutSessionReal: async (data: {
+    clientId?: string;
+    planId: string;
+  }): Promise<{ checkoutUrl: string; sessionId: string }> => {
+    throw new Error(
+      'Stripe real integration requires backend. Backend must create Checkout Session and return URL.'
+    );
+  },
+
+  handleReturnFromStripe: (sessionId: string): StripeSession | null => {
+    return stripeService.getSessionById(sessionId);
   },
 
   getAllSessions: (): StripeSession[] => {

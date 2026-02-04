@@ -23,7 +23,7 @@ export const leadsService = {
     const newLead: Lead = {
       ...lead,
       id: `LEAD-${Date.now()}`,
-      status: 'new',
+      status: 'NEW',
       createdAt: new Date().toISOString(),
     };
 
@@ -59,7 +59,7 @@ export const leadsService = {
       status: 'INACTIVE',
     });
 
-    leadsService.updateLead(leadId, { status: 'converted' });
+    leadsService.updateLead(leadId, { status: 'CONVERTED' });
 
     return client.id;
   },

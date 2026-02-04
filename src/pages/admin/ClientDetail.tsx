@@ -68,7 +68,7 @@ export function ClientDetail() {
   const [isWebcamOpen, setIsWebcamOpen] = useState(false);
   const [editingEconomicItem, setEditingEconomicItem] = useState<EconomicProfileItem | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'TRANSFER'>('CASH');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -764,7 +764,7 @@ export function ClientDetail() {
                               {formatDateTime(payment.createdAt)}
                             </p>
                             <Badge variant="outline" className="mt-2">
-                              {payment.method === 'cash' ? 'Efectivo' : payment.method === 'card' ? 'Tarjeta' : 'Transferencia'}
+                              {payment.method === 'CASH' ? 'Efectivo' : payment.method === 'CARD' ? 'Tarjeta' : payment.method === 'STRIPE' ? 'Stripe' : 'Transferencia'}
                             </Badge>
                           </div>
                           <p className="text-lg font-bold">{formatCurrency(payment.amount)}</p>
@@ -916,9 +916,9 @@ export function ClientDetail() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cash">Efectivo</SelectItem>
-                  <SelectItem value="card">Tarjeta</SelectItem>
-                  <SelectItem value="transfer">Transferencia</SelectItem>
+                  <SelectItem value="CASH">Efectivo</SelectItem>
+                  <SelectItem value="CARD">Tarjeta</SelectItem>
+                  <SelectItem value="TRANSFER">Transferencia</SelectItem>
                 </SelectContent>
               </Select>
             </div>

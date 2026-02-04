@@ -109,7 +109,7 @@ export function Leads() {
           <CardHeader className="pb-3">
             <CardDescription>Nuevos</CardDescription>
             <CardTitle className="text-3xl text-blue-600">
-              {leads.filter(l => l.status === 'new').length}
+              {leads.filter(l => l.status === 'NEW').length}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -117,7 +117,7 @@ export function Leads() {
           <CardHeader className="pb-3">
             <CardDescription>Contactados</CardDescription>
             <CardTitle className="text-3xl text-yellow-600">
-              {leads.filter(l => l.status === 'contacted').length}
+              {leads.filter(l => l.status === 'CONTACTED').length}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -125,7 +125,7 @@ export function Leads() {
           <CardHeader className="pb-3">
             <CardDescription>Convertidos</CardDescription>
             <CardTitle className="text-3xl text-green-600">
-              {leads.filter(l => l.status === 'converted').length}
+              {leads.filter(l => l.status === 'CONVERTED').length}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -204,16 +204,16 @@ export function Leads() {
                     <TableCell>{formatDate(lead.createdAt)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {lead.status === 'new' && (
+                        {lead.status === 'NEW' && (
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleUpdateStatus(lead.id, 'contacted')}
+                            onClick={() => handleUpdateStatus(lead.id, 'CONTACTED')}
                           >
                             Marcar Contactado
                           </Button>
                         )}
-                        {lead.status !== 'converted' && (
+                        {lead.status !== 'CONVERTED' && (
                           <Button
                             size="sm"
                             onClick={() => {

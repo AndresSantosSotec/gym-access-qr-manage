@@ -55,10 +55,21 @@ export interface Payment {
   planId: string;
   membershipId?: string;
   amount: number;
-  method: 'CASH' | 'TRANSFER' | 'STRIPE';
+  method: 'CASH' | 'TRANSFER' | 'STRIPE' | 'CARD';
   createdAt: string;
   reference?: string;
   status: 'PAID' | 'PENDING' | 'FAILED';
+}
+
+export interface Lead {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  planSlug: string;
+  preferredPaymentMethod: string;
+  status: 'NEW' | 'CONTACTED' | 'CONVERTED';
+  createdAt: string;
 }
 
 export interface AccessLog {

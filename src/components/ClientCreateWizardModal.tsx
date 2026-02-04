@@ -157,29 +157,14 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
         const method = finalPaymentMethod || paymentMethod;
         const hasPaid = method !== 'STRIPE';
 
-        const membership = membershipsService.createMembership({
-          clientId: newClient.id,
-          planId: selectedPlanId,
-          startDate,
-          endDate,
-          status: hasPaid ? 'ACTIVE' : 'PENDING',
-        });
-
-        const payment = paymentsService.createPayment({
-          clientId: newClient.id,
-          planId: selectedPlanId,
-          membershipId: membership.id,
-          amount: selectedPlan.price,
+        const payment = membershipsService.assignMembership(
+          newClient.id,
+          selectedPlanId,
           method,
-          status: hasPaid ? 'PAID' : 'PENDING',
-        });
+          selectedPlan.price
+        );
 
-        if (hasPaid) {
-          clientsService.update(newClient.id, {
-            status: 'ACTIVE',
-            membershipEnd: endDate,
-          });
-
+        if (hasPaid && payment) {
           cashService.createMovement({
             type: 'IN',
             amount: selectedPlan.price,
@@ -576,7 +561,7 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
             ) : (
               <Button
                 onClick={() => handleFinish()}
-                disabled={isSubmitting || (selectedPlanId && paymentMethod === 'STRIPE')}
+                disabled={isSubmitting || (selectedPlanId !== '' && paymentMethod === 'STRIPE')}
               >
                 {isSubmitting ? 'Creando...' : 'Finalizar'}
               </Button>

@@ -15,7 +15,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { accessService } from '@/services/access.service';
-import { clientsService } from '@/services/clients.service';
 import { formatDate } from '@/utils/date';
 import { QrCode, Fingerprint, CheckCircle, XCircle, MagnifyingGlass } from '@phosphor-icons/react';
 import { toast } from 'sonner';
@@ -28,36 +27,6 @@ export function AccessControl() {
   const [recentLogs, setRecentLogs] = useState<AccessLog[]>(accessService.getRecentLogs(20));
   const [lastVerifiedClient, setLastVerifiedClient] = useState<Client | null>(null);
   const [lastResult, setLastResult] = useState<'ALLOWED' | 'DENIED' | null>(null);
-
-  const verifyClient = (client: Client | null, method: 'QR' | 'FINGERPRINT') => {
-    if (!client) {
-      toast.error('Cliente no encontrado');
-      setLastResult('DENIED');
-      setLastVerifiedClient(null);
-      return;
-    }
-
-    const hasActiveMembership = client.status === 'ACTIVE' && 
-      client.membershipEnd && 
-      new Date(client.membershipEnd) >= new Date();
-
-    if (hasActiveMembership) {
-      toast.success(`✓ Acceso permitido: ${client.name}`, {
-        description: `Membresía válida hasta ${formatDate(client.membershipEnd || '')}`,
-      });
-      accessService.registerAccess(client.id, 'ALLOWED', method);
-      setLastResult('ALLOWED');
-    } else {
-      toast.error(`✗ Acceso denegado: ${client.name}`, {
-        description: 'Membresía vencida o inactiva',
-      });
-      accessService.registerAccess(client.id, 'DENIED', method);
-      setLastResult('DENIED');
-    }
-
-    setLastVerifiedClient(client);
-    setRecentLogs(accessService.getRecentLogs(20));
-  };
 
   const handleVerifyQR = async () => {
     if (!qrCode.trim()) {
@@ -72,11 +41,28 @@ export function AccessControl() {
     try {
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      const clientId = qrCode.replace('QR-CLIENT-', '');
-      const client = clientsService.getById(clientId);
-
-      verifyClient(client, 'QR');
+      const result = accessService.verifyAccessByQR(qrCode);
+      
+      if (result.client) {
+        setLastVerifiedClient(result.client);
+        if (result.allowed) {
+          toast.success(`✓ Acceso permitido: ${result.client.name}`, {
+            description: result.client.membershipEnd ? `Membresía válida hasta ${formatDate(result.client.membershipEnd)}` : '',
+          });
+          setLastResult('ALLOWED');
+        } else {
+          toast.error(`✗ Acceso denegado: ${result.client.name}`, {
+            description: result.message,
+          });
+          setLastResult('DENIED');
+        }
+      } else {
+        toast.error(result.message);
+        setLastResult('DENIED');
+      }
+      
       setQrCode('');
+      setRecentLogs(accessService.getRecentLogs(20));
     } finally {
       setIsVerifying(false);
     }
@@ -95,11 +81,28 @@ export function AccessControl() {
     try {
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      const clients = clientsService.getAll();
-      const client = clients.find(c => c.fingerprintId === fingerprintId);
-
-      verifyClient(client || null, 'FINGERPRINT');
+      const result = accessService.verifyAccessByFingerprint(fingerprintId);
+      
+      if (result.client) {
+        setLastVerifiedClient(result.client);
+        if (result.allowed) {
+          toast.success(`✓ Acceso permitido: ${result.client.name}`, {
+            description: result.client.membershipEnd ? `Membresía válida hasta ${formatDate(result.client.membershipEnd)}` : '',
+          });
+          setLastResult('ALLOWED');
+        } else {
+          toast.error(`✗ Acceso denegado: ${result.client.name}`, {
+            description: result.message,
+          });
+          setLastResult('DENIED');
+        }
+      } else {
+        toast.error(result.message);
+        setLastResult('DENIED');
+      }
+      
       setFingerprintId('');
+      setRecentLogs(accessService.getRecentLogs(20));
     } finally {
       setIsVerifying(false);
     }

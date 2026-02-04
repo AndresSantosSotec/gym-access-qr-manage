@@ -41,7 +41,7 @@ export function Payments() {
     clientId: '',
     planId: '',
     amount: '',
-    method: 'cash' as 'cash' | 'card' | 'transfer',
+    method: 'CASH' as 'CASH' | 'CARD' | 'TRANSFER',
     reference: '',
   });
 
@@ -60,7 +60,7 @@ export function Payments() {
       amount: parseFloat(formData.amount),
       method: formData.method,
       reference: formData.reference || undefined,
-      status: 'paid',
+      status: 'PAID',
     });
 
     setPayments(paymentsService.getAllPayments());
@@ -69,7 +69,7 @@ export function Payments() {
       clientId: '',
       planId: '',
       amount: '',
-      method: 'cash',
+      method: 'CASH',
       reference: '',
     });
     toast.success('Pago registrado exitosamente');
@@ -116,8 +116,8 @@ export function Payments() {
   };
 
   const totalRevenue = paymentsService.getTotalRevenue();
-  const paidPayments = payments.filter(p => p.status === 'paid');
-  const pendingPayments = payments.filter(p => p.status === 'pending');
+  const paidPayments = payments.filter(p => p.status === 'PAID');
+  const pendingPayments = payments.filter(p => p.status === 'PENDING');
 
   return (
     <div className="p-6 lg:p-8 space-y-6">

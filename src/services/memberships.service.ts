@@ -74,7 +74,7 @@ export const membershipsService = {
   assignMembership: (
     clientId: string,
     planId: string,
-    paymentMethod: 'cash' | 'card' | 'transfer' | 'stripe',
+    paymentMethod: Payment['method'],
     amount: number,
     reference?: string
   ): Payment | null => {
@@ -91,7 +91,7 @@ export const membershipsService = {
       method: paymentMethod,
       createdAt: new Date().toISOString(),
       reference,
-      status: 'paid',
+      status: 'PAID',
     };
 
     const payments = storage.get<Payment[]>(STORAGE_KEYS.PAYMENTS) || [];
