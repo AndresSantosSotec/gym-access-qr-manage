@@ -11,16 +11,19 @@ const initializeMockClients = (): void => {
         name: 'Juan Pérez',
         phone: '+502 5555-1234',
         email: 'juan.perez@email.com',
-        status: 'active',
+        status: 'ACTIVE',
         membershipEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
+        profilePhoto: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%234f46e5" width="200" height="200"/%3E%3Ctext fill="white" font-size="80" font-family="Arial" x="50%25" y="50%25" text-anchor="middle" dominant-baseline="middle"%3EJP%3C/text%3E%3C/svg%3E',
+        fingerprintId: 'FP-CLT-001-1704067200000-abc123',
+        fingerprintRegisteredAt: new Date(Date.now() - 85 * 24 * 60 * 60 * 1000).toISOString(),
       },
       {
         id: 'CLT-002',
         name: 'María González',
         phone: '+502 5555-5678',
         email: 'maria.gonzalez@email.com',
-        status: 'expired',
+        status: 'INACTIVE',
         membershipEnd: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
         createdAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
       },
@@ -28,9 +31,10 @@ const initializeMockClients = (): void => {
         id: 'CLT-003',
         name: 'Carlos Ramírez',
         phone: '+502 5555-9012',
-        status: 'active',
+        status: 'ACTIVE',
         membershipEnd: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
         createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
+        profilePhoto: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%2310b981" width="200" height="200"/%3E%3Ctext fill="white" font-size="80" font-family="Arial" x="50%25" y="50%25" text-anchor="middle" dominant-baseline="middle"%3ECR%3C/text%3E%3C/svg%3E',
       },
     ];
     storage.set(STORAGE_KEYS.CLIENTS, mockClients);
@@ -44,7 +48,7 @@ export const clientsService = {
     
     return clients.map(client => ({
       ...client,
-      status: client.membershipEnd && isExpired(client.membershipEnd) ? 'expired' : client.status,
+      status: client.membershipEnd && isExpired(client.membershipEnd) ? 'INACTIVE' : client.status,
     }));
   },
 

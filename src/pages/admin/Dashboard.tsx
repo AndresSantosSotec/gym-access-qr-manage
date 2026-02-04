@@ -19,8 +19,8 @@ export function Dashboard() {
   const payments = useMemo(() => membershipsService.getAllPayments(), []);
   const recentLogs = useMemo(() => accessService.getRecentLogs(10), []);
 
-  const activeClients = clients.filter((c) => c.status === 'active').length;
-  const expiredClients = clients.filter((c) => c.status === 'expired').length;
+  const activeClients = clients.filter((c) => c.status === 'ACTIVE').length;
+  const inactiveClients = clients.filter((c) => c.status === 'INACTIVE' || c.status === 'SUSPENDED').length;
 
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
@@ -40,8 +40,8 @@ export function Dashboard() {
       bgColor: 'bg-green-50',
     },
     {
-      title: 'Miembros Vencidos',
-      value: expiredClients,
+      title: 'Miembros Inactivos',
+      value: inactiveClients,
       icon: UserMinus,
       color: 'text-red-600',
       bgColor: 'bg-red-50',

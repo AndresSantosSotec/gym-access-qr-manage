@@ -47,7 +47,7 @@ export function ClientsList() {
 
     const client = clientsService.create({
       ...newClient,
-      status: 'inactive',
+      status: 'INACTIVE',
     });
 
     setClients(clientsService.getAll());
@@ -57,7 +57,7 @@ export function ClientsList() {
   };
 
   const getStatusBadge = (client: Client) => {
-    if (client.status === 'active') {
+    if (client.status === 'ACTIVE') {
       const daysRemaining = client.membershipEnd ? getDaysRemaining(client.membershipEnd) : 0;
       if (daysRemaining < 0) {
         return <Badge variant="destructive">Vencido</Badge>;
@@ -67,10 +67,19 @@ export function ClientsList() {
       }
       return <Badge className="bg-green-600">Activo</Badge>;
     }
-    if (client.status === 'expired') {
-      return <Badge variant="destructive">Vencido</Badge>;
+    if (client.status === 'SUSPENDED') {
+      return <Badge variant="destructive">Suspendido</Badge>;
     }
     return <Badge variant="secondary">Inactivo</Badge>;
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
   };
 
   return (
@@ -194,6 +203,7 @@ export function ClientsList() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
+                    <th className="text-left py-3 px-4 font-semibold text-sm">Foto</th>
                     <th className="text-left py-3 px-4 font-semibold text-sm">Nombre</th>
                     <th className="text-left py-3 px-4 font-semibold text-sm">Teléfono</th>
                     <th className="text-left py-3 px-4 font-semibold text-sm">Estado</th>
@@ -204,6 +214,19 @@ export function ClientsList() {
                 <tbody>
                   {filteredClients.map((client) => (
                     <tr key={client.id} className="border-b border-border hover:bg-accent/50 transition-colors">
+                      <td className="py-4 px-4">
+                        {client.profilePhoto ? (
+                          <img
+                            src={client.profilePhoto}
+                            alt={client.name}
+                            className="w-10 h-10 rounded-full object-cover ring-2 ring-border"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-sm font-bold text-primary">
+                            {getInitials(client.name)}
+                          </div>
+                        )}
+                      </td>
                       <td className="py-4 px-4 font-medium">{client.name}</td>
                       <td className="py-4 px-4 text-muted-foreground">{client.phone}</td>
                       <td className="py-4 px-4">{getStatusBadge(client)}</td>

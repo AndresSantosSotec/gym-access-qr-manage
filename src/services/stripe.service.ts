@@ -69,7 +69,7 @@ export const stripeService = {
         const endDate = addDays(startDate, plan.durationDays);
         
         clientsService.update(session.clientId, {
-          status: 'active',
+          status: 'ACTIVE',
           membershipEnd: endDate.toISOString(),
         });
       }

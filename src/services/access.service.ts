@@ -16,7 +16,7 @@ export const accessService = {
       };
     }
 
-    const allowed = !!(client.status === 'active' && 
+    const allowed = !!(client.status === 'ACTIVE' && 
                     client.membershipEnd && 
                     !isExpired(client.membershipEnd));
 

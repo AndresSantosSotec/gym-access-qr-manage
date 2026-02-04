@@ -101,7 +101,7 @@ export const membershipsService = {
     const endDate = addDays(startDate, plan.durationDays);
 
     clientsService.update(clientId, {
-      status: 'active',
+      status: 'ACTIVE',
       membershipEnd: endDate.toISOString(),
     });
 

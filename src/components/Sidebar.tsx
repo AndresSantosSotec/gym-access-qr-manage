@@ -15,6 +15,7 @@ import {
   ChartLine,
   Bell,
   Camera,
+  Fingerprint,
 } from '@phosphor-icons/react';
 
 interface SidebarProps {
@@ -28,6 +29,7 @@ const menuItems = [
   { to: '/admin/memberships', icon: CreditCard, label: 'Membresías' },
   { to: '/admin/payments', icon: Money, label: 'Pagos' },
   { to: '/admin/access', icon: QrCode, label: 'Control de Acceso' },
+  { to: '/admin/fingerprints', icon: Fingerprint, label: 'Huellas Digitales' },
   { to: '/admin/site', icon: Globe, label: 'Sitio Web' },
   { to: '/admin/blog', icon: Article, label: 'Blog' },
   { to: '/admin/settings', icon: Gear, label: 'Configuración' },

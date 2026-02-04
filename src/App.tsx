@@ -16,6 +16,7 @@ import { Roles } from '@/pages/admin/Roles';
 import { Reports } from '@/pages/admin/Reports';
 import { Notifications } from '@/pages/admin/Notifications';
 import { Cameras } from '@/pages/admin/Cameras';
+import { Fingerprints } from '@/pages/admin/Fingerprints';
 import { QrPass } from '@/pages/public/QrPass';
 import { PublicHome } from '@/pages/public/PublicHome';
 import { PublicPlans } from '@/pages/public/PublicPlans';
@@ -52,6 +53,7 @@ function App() {
           <Route path="memberships" element={<Memberships />} />
           <Route path="payments" element={<Payments />} />
           <Route path="access" element={<AccessControl />} />
+          <Route path="fingerprints" element={<Fingerprints />} />
           <Route path="site" element={<SiteSettings />} />
           <Route path="blog" element={<BlogAdmin />} />
           <Route path="roles" element={<Roles />} />

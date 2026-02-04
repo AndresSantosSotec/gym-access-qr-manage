@@ -37,7 +37,7 @@ export function QrPass() {
   }
 
   const qrCode = clientsService.generateQR(client.id);
-  const isActive = client.status === 'active' && client.membershipEnd && !getDaysRemaining(client.membershipEnd) || getDaysRemaining(client.membershipEnd!) > 0;
+  const isActive = client.status === 'ACTIVE' && client.membershipEnd && !getDaysRemaining(client.membershipEnd) || getDaysRemaining(client.membershipEnd!) > 0;
   const daysRemaining = client.membershipEnd ? getDaysRemaining(client.membershipEnd) : null;
 
   return (
@@ -90,7 +90,7 @@ export function QrPass() {
                 variant={isActive ? 'default' : 'destructive'}
                 className="text-sm px-3 py-1"
               >
-                {isActive ? 'Vigente' : client.status === 'expired' ? 'Vencida' : 'Inactiva'}
+                {isActive ? 'Vigente' : client.status === 'SUSPENDED' ? 'Suspendida' : 'Inactiva'}
               </Badge>
             </div>
 

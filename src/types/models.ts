@@ -6,8 +6,22 @@ export interface Client {
   dpi?: string;
   photo?: string;
   notes?: string;
-  status: 'active' | 'expired' | 'inactive';
+  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   membershipEnd?: string;
+  profilePhoto?: string;
+  fingerprintId?: string;
+  fingerprintRegisteredAt?: string;
+  createdAt: string;
+}
+
+export interface EconomicProfileItem {
+  id: string;
+  clientId: string;
+  type: 'INCOME' | 'EXPENSE';
+  category: string;
+  source?: string;
+  monthlyAmount: number;
+  active: boolean;
   createdAt: string;
 }
 

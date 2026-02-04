@@ -9,6 +9,7 @@ const STORAGE_KEYS = {
   LEADS: 'gym_leads',
   STRIPE_SESSIONS: 'gym_stripe_sessions',
   ROLES: 'gym_roles',
+  ECONOMIC_PROFILES: 'gym_economic_profiles',
   SEED_INITIALIZED: 'gym_seed_initialized',
 } as const;
 

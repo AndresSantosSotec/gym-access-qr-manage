@@ -56,7 +56,7 @@ export const leadsService = {
       name: lead.name,
       phone: lead.phone,
       email: lead.email,
-      status: 'inactive',
+      status: 'INACTIVE',
     });
 
     leadsService.updateLead(leadId, { status: 'converted' });
