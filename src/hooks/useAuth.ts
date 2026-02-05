@@ -1,13 +1,13 @@
 import { useKV } from '@github/spark/hooks';
 
-interface AuthState {
-  token: string;
+  user: {
+    username: st
   user: {
     id: string;
     username: string;
   };
-  createdAt: string;
-}
+  const [auth, setAu
+ 
 
 export function useAuth() {
   const [auth, setAuth] = useKV<AuthState | null>('auth-state', null);
@@ -17,29 +17,28 @@ export function useAuth() {
       const authState: AuthState = {
         token: 'demo-token-' + Date.now(),
         user: {
-          id: 'demo-user-1',
+      return true;
           username: username,
         },
         createdAt: new Date().toISOString(),
-      };
+  return
 
-      setAuth(authState);
+    isAuthenticated,
       return true;
-    }
 
-    return false;
-  };
 
-  const logout = () => {
+
+
+
+
     setAuth(null);
-  };
+
 
   const isAuthenticated = !!auth;
 
-  return {
+
     auth,
-    login,
+
     logout,
-    isAuthenticated,
+
   };
-}
