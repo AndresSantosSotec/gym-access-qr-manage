@@ -1,20 +1,19 @@
-import { storage, STORAGE_KEYS } from '@/utils/storage';
 import type { Role, PermissionKey } from '@/types/models';
 
 const ROLES_KEY = 'gymflow_roles';
 
 export const rolesService = {
-  getAllRoles: (): Role[] => {
-    return storage.get<Role[]>(ROLES_KEY) || [];
+  getAllRoles: async (): Promise<Role[]> => {
+    return await window.spark.kv.get<Role[]>(ROLES_KEY) || [];
   },
 
-  getRoleById: (id: string): Role | undefined => {
-    const roles = rolesService.getAllRoles();
+  getRoleById: async (id: string): Promise<Role | undefined> => {
+    const roles = await rolesService.getAllRoles();
     return roles.find(r => r.id === id);
   },
 
-  createRole: (data: Omit<Role, 'id' | 'createdAt'>): Role => {
-    const roles = rolesService.getAllRoles();
+  createRole: async (data: Omit<Role, 'id' | 'createdAt'>): Promise<Role> => {
+    const roles = await rolesService.getAllRoles();
     
     const newRole: Role = {
       ...data,
@@ -23,13 +22,13 @@ export const rolesService = {
     };
 
     const updated = [...roles, newRole];
-    storage.set(ROLES_KEY, updated);
+    await window.spark.kv.set(ROLES_KEY, updated);
     
     return newRole;
   },
 
-  updateRole: (id: string, data: Partial<Omit<Role, 'id' | 'createdAt'>>): Role | null => {
-    const roles = rolesService.getAllRoles();
+  updateRole: async (id: string, data: Partial<Omit<Role, 'id' | 'createdAt'>>): Promise<Role | null> => {
+    const roles = await rolesService.getAllRoles();
     const index = roles.findIndex(r => r.id === id);
     
     if (index === -1) return null;
@@ -38,22 +37,22 @@ export const rolesService = {
       r.id === id ? { ...r, ...data } : r
     );
     
-    storage.set(ROLES_KEY, updated);
+    await window.spark.kv.set(ROLES_KEY, updated);
     return updated[index];
   },
 
-  deleteRole: (id: string): boolean => {
-    const roles = rolesService.getAllRoles();
+  deleteRole: async (id: string): Promise<boolean> => {
+    const roles = await rolesService.getAllRoles();
     const filtered = roles.filter(r => r.id !== id);
     
     if (filtered.length === roles.length) return false;
     
-    storage.set(ROLES_KEY, filtered);
+    await window.spark.kv.set(ROLES_KEY, filtered);
     return true;
   },
 
-  hasPermission: (roleId: string, permission: PermissionKey): boolean => {
-    const role = rolesService.getRoleById(roleId);
+  hasPermission: async (roleId: string, permission: PermissionKey): Promise<boolean> => {
+    const role = await rolesService.getRoleById(roleId);
     if (!role) return false;
     return role.permissions.includes(permission);
   },

@@ -9,18 +9,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { authService } from '@/services/auth.service';
-import { rolesService } from '@/services/roles.service';
+import { useAuth } from '@/hooks/useAuth';
 import { SignOut, User } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 
 export function Topbar() {
   const navigate = useNavigate();
-  const auth = authService.getCurrentUser();
-  const role = auth?.user.roleId ? rolesService.getRoleById(auth.user.roleId) : null;
+  const { auth, logout } = useAuth();
 
   const handleLogout = () => {
-    authService.logout();
+    logout();
     toast.success('Sesión cerrada correctamente');
     navigate('/login');
   };
@@ -49,7 +47,7 @@ export function Topbar() {
             </Avatar>
             <div className="text-left">
               <div className="text-sm font-semibold">{auth?.user.name}</div>
-              <div className="text-xs text-muted-foreground">{role?.name || 'Usuario'}</div>
+              <div className="text-xs text-muted-foreground">Administrador</div>
             </div>
           </Button>
         </DropdownMenuTrigger>

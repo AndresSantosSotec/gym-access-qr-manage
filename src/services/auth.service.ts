@@ -1,4 +1,3 @@
-import { storage, STORAGE_KEYS } from '@/utils/storage';
 import type { AuthState, User } from '@/types/models';
 import { usersService } from './users.service';
 
@@ -11,14 +10,14 @@ export const authService = {
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     if ((emailOrUsername === DEMO_USER_USERNAME || emailOrUsername === DEMO_USER_EMAIL) && password === DEMO_USER_PASSWORD) {
-      let demoUser = usersService.getUserByUsername(DEMO_USER_USERNAME);
+      let demoUser = await usersService.getUserByUsername(DEMO_USER_USERNAME);
       
       if (!demoUser) {
         const roles = await import('./roles.service').then(m => m.rolesService.getAllRoles());
         const adminRole = roles.find(r => r.name === 'Admin');
         
         if (adminRole) {
-          demoUser = usersService.createUser({
+          demoUser = await usersService.createUser({
             name: 'Administrador Demo',
             username: DEMO_USER_USERNAME,
             email: 'admin@demo.com',
@@ -37,23 +36,23 @@ export const authService = {
         user: demoUser,
       };
       
-      storage.set(STORAGE_KEYS.AUTH, authState);
+      await window.spark.kv.set('gym_auth', authState);
       return authState;
     }
 
     throw new Error('Credenciales inválidas');
   },
 
-  logout: (): void => {
-    storage.remove(STORAGE_KEYS.AUTH);
+  logout: async (): Promise<void> => {
+    await window.spark.kv.delete('gym_auth');
   },
 
-  getCurrentUser: (): AuthState | null => {
-    return storage.get<AuthState>(STORAGE_KEYS.AUTH);
+  getCurrentUser: async (): Promise<AuthState | null> => {
+    return await window.spark.kv.get<AuthState>('gym_auth') || null;
   },
 
-  isAuthenticated: (): boolean => {
-    const auth = storage.get<AuthState>(STORAGE_KEYS.AUTH);
+  isAuthenticated: async (): Promise<boolean> => {
+    const auth = await window.spark.kv.get<AuthState>('gym_auth');
     return !!auth?.token;
   },
 };

@@ -1,25 +1,24 @@
-import { storage } from '@/utils/storage';
 import type { User } from '@/types/models';
 
 const USERS_KEY = 'gymflow_users';
 
 export const usersService = {
-  getAllUsers: (): User[] => {
-    return storage.get<User[]>(USERS_KEY) || [];
+  getAllUsers: async (): Promise<User[]> => {
+    return await window.spark.kv.get<User[]>(USERS_KEY) || [];
   },
 
-  getUserById: (id: string): User | undefined => {
-    const users = usersService.getAllUsers();
+  getUserById: async (id: string): Promise<User | undefined> => {
+    const users = await usersService.getAllUsers();
     return users.find(u => u.id === id);
   },
 
-  getUserByUsername: (username: string): User | undefined => {
-    const users = usersService.getAllUsers();
+  getUserByUsername: async (username: string): Promise<User | undefined> => {
+    const users = await usersService.getAllUsers();
     return users.find(u => u.username === username);
   },
 
-  createUser: (data: Omit<User, 'id' | 'createdAt'>): User => {
-    const users = usersService.getAllUsers();
+  createUser: async (data: Omit<User, 'id' | 'createdAt'>): Promise<User> => {
+    const users = await usersService.getAllUsers();
     
     const newUser: User = {
       ...data,
@@ -28,13 +27,13 @@ export const usersService = {
     };
 
     const updated = [...users, newUser];
-    storage.set(USERS_KEY, updated);
+    await window.spark.kv.set(USERS_KEY, updated);
     
     return newUser;
   },
 
-  updateUser: (id: string, data: Partial<Omit<User, 'id' | 'createdAt'>>): User | null => {
-    const users = usersService.getAllUsers();
+  updateUser: async (id: string, data: Partial<Omit<User, 'id' | 'createdAt'>>): Promise<User | null> => {
+    const users = await usersService.getAllUsers();
     const index = users.findIndex(u => u.id === id);
     
     if (index === -1) return null;
@@ -43,17 +42,17 @@ export const usersService = {
       u.id === id ? { ...u, ...data } : u
     );
     
-    storage.set(USERS_KEY, updated);
+    await window.spark.kv.set(USERS_KEY, updated);
     return updated[index];
   },
 
-  deleteUser: (id: string): boolean => {
-    const users = usersService.getAllUsers();
+  deleteUser: async (id: string): Promise<boolean> => {
+    const users = await usersService.getAllUsers();
     const filtered = users.filter(u => u.id !== id);
     
     if (filtered.length === users.length) return false;
     
-    storage.set(USERS_KEY, filtered);
+    await window.spark.kv.set(USERS_KEY, filtered);
     return true;
   },
 };
