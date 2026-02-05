@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,13 +44,22 @@ const PERMISSION_GROUPS = {
 };
 
 export function Roles() {
-  const [roles, setRoles] = useState(rolesService.getAllRoles());
+  const [roles, setRoles] = useState<Role[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [permissions, setPermissions] = useState<PermissionKey[]>([]);
+
+  useEffect(() => {
+    loadRoles();
+  }, []);
+
+  const loadRoles = async () => {
+    const data = await rolesService.getAllRoles();
+    setRoles(data);
+  };
 
   const handleOpenCreate = () => {
     setEditingRole(null);
@@ -90,7 +99,7 @@ export function Roles() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim()) {
       toast.error('El nombre es obligatorio');
       return;
@@ -112,21 +121,21 @@ export function Roles() {
         return;
       }
 
-      rolesService.updateRole(editingRole.id, { name, description, permissions });
+      await rolesService.updateRole(editingRole.id, { name, description, permissions });
       toast.success('Rol actualizado');
     } else {
-      rolesService.createRole({ name, description, permissions });
+      await rolesService.createRole({ name, description, permissions });
       toast.success('Rol creado');
     }
 
-    setRoles(rolesService.getAllRoles());
+    await loadRoles();
     handleCloseDialog();
   };
 
-  const handleDelete = (role: Role) => {
+  const handleDelete = async (role: Role) => {
     if (!confirm(`¿Eliminar el rol "${role.name}"?`)) return;
 
-    const users = usersService.getAllUsers();
+    const users = await usersService.getAllUsers();
     const usersWithRole = users.filter(u => u.roleId === role.id);
     
     if (usersWithRole.length > 0) {
@@ -145,8 +154,8 @@ export function Roles() {
       }
     }
 
-    rolesService.deleteRole(role.id);
-    setRoles(rolesService.getAllRoles());
+    await rolesService.deleteRole(role.id);
+    await loadRoles();
     toast.success('Rol eliminado');
   };
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,14 +30,14 @@ import {
 } from '@/components/ui/select';
 import { usersService } from '@/services/users.service';
 import { rolesService } from '@/services/roles.service';
-import type { User } from '@/types/models';
+import type { User, Role } from '@/types/models';
 import { Plus, Pencil, Trash, UserCircle, MagnifyingGlass } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { formatDate } from '@/utils/date';
 
 export function Users() {
-  const [users, setUsers] = useState(usersService.getAllUsers());
-  const [roles] = useState(rolesService.getAllRoles());
+  const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -47,6 +47,19 @@ export function Users() {
   const [email, setEmail] = useState('');
   const [roleId, setRoleId] = useState('');
   const [active, setActive] = useState(true);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    const [usersData, rolesData] = await Promise.all([
+      usersService.getAllUsers(),
+      rolesService.getAllRoles()
+    ]);
+    setUsers(usersData);
+    setRoles(rolesData);
+  };
 
   const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -79,7 +92,7 @@ export function Users() {
     setEditingUser(null);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim() || !username.trim() || !email.trim() || !roleId) {
       toast.error('Todos los campos son obligatorios');
       return;
@@ -95,22 +108,22 @@ export function Users() {
     }
 
     if (editingUser) {
-      usersService.updateUser(editingUser.id, { name, username, email, roleId, active });
+      await usersService.updateUser(editingUser.id, { name, username, email, roleId, active });
       toast.success('Usuario actualizado');
     } else {
-      usersService.createUser({ name, username, email, roleId, active });
+      await usersService.createUser({ name, username, email, roleId, active });
       toast.success('Usuario creado');
     }
 
-    setUsers(usersService.getAllUsers());
+    await loadData();
     handleCloseDialog();
   };
 
-  const handleDelete = (user: User) => {
+  const handleDelete = async (user: User) => {
     if (!confirm(`¿Eliminar el usuario "${user.name}"?`)) return;
 
-    usersService.deleteUser(user.id);
-    setUsers(usersService.getAllUsers());
+    await usersService.deleteUser(user.id);
+    await loadData();
     toast.success('Usuario eliminado');
   };
 

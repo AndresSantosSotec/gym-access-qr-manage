@@ -5,6 +5,7 @@ interface AuthState {
   user: {
     id: string;
     username: string;
+    name: string;
   };
   createdAt: string;
 }
@@ -19,6 +20,7 @@ export function useAuth() {
         user: {
           id: Date.now().toString(),
           username: username,
+          name: username,
         },
         createdAt: new Date().toISOString(),
       };
@@ -39,11 +41,3 @@ export function useAuth() {
     isAuthenticated: !!auth,
   };
 }
-
-
-
-
-
-
-
-
