@@ -1,11 +1,11 @@
 import { useKV } from '@github/spark/hooks';
 
-  user: {
-    username: st
+interface AuthState {
+  token: string;
   user: {
     id: string;
     username: string;
-expo
+  };
   createdAt: string;
 }
 
@@ -32,12 +32,12 @@ export function useAuth() {
     setAuth(null);
   };
 
-    isAuthenticated,
+  const isAuthenticated = !!auth;
 
-
-
-
-
+  return {
+    auth,
+    login,
+    logout,
     isAuthenticated,
   };
 }
