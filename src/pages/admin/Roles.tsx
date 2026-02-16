@@ -41,15 +41,13 @@ const PERMISSION_GROUPS = {
   'Configuración': ['SETTINGS_VIEW', 'SETTINGS_MANAGE'] as PermissionKey[],
   'Roles': ['ROLES_VIEW', 'ROLES_MANAGE'] as PermissionKey[],
   'Usuarios': ['USERS_VIEW', 'USERS_MANAGE'] as PermissionKey[],
-  'Varios': ['REPORTS_VIEW', 'NOTIFICATIONS_VIEW', 'CAMERAS_VIEW'] as PermissionKey[],
 };
 
 export function Roles() {
   const [roles, setRoles] = useState<Role[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
-
+  
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [permissions, setPermissions] = useState<PermissionKey[]>([]);
@@ -59,15 +57,8 @@ export function Roles() {
   }, []);
 
   const loadRoles = async () => {
-    setIsLoading(true);
-    try {
-      const data = await rolesService.getAllRoles();
-      setRoles(data);
-    } catch (error) {
-      toast.error('Error al cargar roles');
-    } finally {
-      setIsLoading(false);
-    }
+    const data = await rolesService.getAllRoles();
+    setRoles(data);
   };
 
   const handleOpenCreate = () => {
@@ -82,11 +73,7 @@ export function Roles() {
     setEditingRole(role);
     setName(role.name);
     setDescription(role.description || '');
-    // Ensure permissions is an array of strings (backend might return objects)
-    const perms = Array.isArray(role.permissions)
-      ? role.permissions.map(p => typeof p === 'string' ? p : (p as any).slug)
-      : [];
-    setPermissions(perms);
+    setPermissions(role.permissions);
     setIsDialogOpen(true);
   };
 
@@ -123,67 +110,53 @@ export function Roles() {
       return;
     }
 
-    try {
-      if (editingRole) {
-        const hasRolesManage = permissions.includes('ROLES_MANAGE');
-        const otherRolesWithManage = roles.filter(
-          r => r.id !== editingRole.id &&
-            (Array.isArray(r.permissions) && r.permissions.some(p => (typeof p === 'string' ? p : (p as any).slug) === 'ROLES_MANAGE'))
-        );
-
-        if (!hasRolesManage && otherRolesWithManage.length === 0) {
-          toast.error('Debe existir al menos un rol con permiso ROLES_MANAGE');
-          return;
-        }
-
-        await rolesService.updateRole(editingRole.id, { name, description, permissions });
-        toast.success('Rol actualizado');
-      } else {
-        await rolesService.createRole({ name, description, permissions });
-        toast.success('Rol creado');
+    if (editingRole) {
+      const hasRolesManage = permissions.includes('ROLES_MANAGE');
+      const otherRolesWithManage = roles.filter(
+        r => r.id !== editingRole.id && r.permissions.includes('ROLES_MANAGE')
+      );
+      
+      if (!hasRolesManage && otherRolesWithManage.length === 0) {
+        toast.error('Debe existir al menos un rol con permiso ROLES_MANAGE');
+        return;
       }
 
-      await loadRoles();
-      handleCloseDialog();
-    } catch (error) {
-      toast.error('Error al guardar el rol');
+      await rolesService.updateRole(editingRole.id, { name, description, permissions });
+      toast.success('Rol actualizado');
+    } else {
+      await rolesService.createRole({ name, description, permissions });
+      toast.success('Rol creado');
     }
+
+    await loadRoles();
+    handleCloseDialog();
   };
 
   const handleDelete = async (role: Role) => {
     if (!confirm(`¿Eliminar el rol "${role.name}"?`)) return;
 
-    try {
-      const users = await usersService.getAllUsers();
-      const usersWithRole = users.filter(u => u.roleId === role.id || (u as any).role_id === role.id);
+    const users = await usersService.getAllUsers();
+    const usersWithRole = users.filter(u => u.roleId === role.id);
+    
+    if (usersWithRole.length > 0) {
+      toast.error(`No se puede eliminar. ${usersWithRole.length} usuario(s) tienen este rol.`);
+      return;
+    }
 
-      if (usersWithRole.length > 0) {
-        toast.error(`No se puede eliminar. ${usersWithRole.length} usuario(s) tienen este rol.`);
+    if (role.permissions.includes('ROLES_MANAGE')) {
+      const otherRolesWithManage = roles.filter(
+        r => r.id !== role.id && r.permissions.includes('ROLES_MANAGE')
+      );
+      
+      if (otherRolesWithManage.length === 0) {
+        toast.error('No se puede eliminar el último rol con permiso ROLES_MANAGE');
         return;
       }
-
-      const rolePerms = Array.isArray(role.permissions)
-        ? role.permissions.map(p => typeof p === 'string' ? p : (p as any).slug)
-        : [];
-
-      if (rolePerms.includes('ROLES_MANAGE')) {
-        const otherRolesWithManage = roles.filter(
-          r => r.id !== role.id &&
-            (Array.isArray(r.permissions) && r.permissions.some(p => (typeof p === 'string' ? p : (p as any).slug) === 'ROLES_MANAGE'))
-        );
-
-        if (otherRolesWithManage.length === 0) {
-          toast.error('No se puede eliminar el último rol con permiso ROLES_MANAGE');
-          return;
-        }
-      }
-
-      await rolesService.deleteRole(role.id);
-      await loadRoles();
-      toast.success('Rol eliminado');
-    } catch (error) {
-      toast.error('Error al eliminar el rol');
     }
+
+    await rolesService.deleteRole(role.id);
+    await loadRoles();
+    toast.success('Rol eliminado');
   };
 
   return (
@@ -240,14 +213,11 @@ export function Roles() {
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
-                  {(role.permissions || []).map((p) => {
-                    const slug = typeof p === 'string' ? p : (p as any).slug;
-                    return (
-                      <Badge key={slug} variant="secondary">
-                        {slug}
-                      </Badge>
-                    );
-                  })}
+                  {role.permissions.map((permission) => (
+                    <Badge key={permission} variant="secondary">
+                      {permission}
+                    </Badge>
+                  ))}
                 </div>
                 <p className="text-xs text-muted-foreground mt-3">
                   Creado: {formatDate(role.createdAt)}

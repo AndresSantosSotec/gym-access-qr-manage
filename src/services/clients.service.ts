@@ -1,110 +1,147 @@
-import { storage, STORAGE_KEYS } from '@/utils/storage';
+import { api } from './api.service';
 import type { Client } from '@/types/models';
-import { isExpired } from '@/utils/date';
 
-const initializeMockClients = (): void => {
-  const existingClients = storage.get<Client[]>(STORAGE_KEYS.CLIENTS);
-  if (!existingClients) {
-    const mockClients: Client[] = [
-      {
-        id: 'CLT-001',
-        name: 'Juan Pérez',
-        phone: '+502 5555-1234',
-        email: 'juan.perez@email.com',
-        status: 'ACTIVE',
-        membershipEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
-        profilePhoto: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%234f46e5" width="200" height="200"/%3E%3Ctext fill="white" font-size="80" font-family="Arial" x="50%25" y="50%25" text-anchor="middle" dominant-baseline="middle"%3EJP%3C/text%3E%3C/svg%3E',
-        fingerprintId: 'FP-CLT-001-1704067200000-abc123',
-        fingerprintRegisteredAt: new Date(Date.now() - 85 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: 'CLT-002',
-        name: 'María González',
-        phone: '+502 5555-5678',
-        email: 'maria.gonzalez@email.com',
-        status: 'INACTIVE',
-        membershipEnd: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-        createdAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: 'CLT-003',
-        name: 'Carlos Ramírez',
-        phone: '+502 5555-9012',
-        status: 'ACTIVE',
-        membershipEnd: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
-        createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
-        profilePhoto: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%2310b981" width="200" height="200"/%3E%3Ctext fill="white" font-size="80" font-family="Arial" x="50%25" y="50%25" text-anchor="middle" dominant-baseline="middle"%3ECR%3C/text%3E%3C/svg%3E',
-      },
-    ];
-    storage.set(STORAGE_KEYS.CLIENTS, mockClients);
+// Helper transform function
+const mapClientFromBackend = (data: any): Client => {
+  // Construct full photo URL if exists
+  let profilePhoto = undefined;
+  if (data.photo_url) {
+    if (data.photo_url.startsWith('http')) {
+      profilePhoto = data.photo_url;
+    } else {
+      // Assuming storage is served from /storage
+      const storageUrl = import.meta.env.VITE_STORAGE_URL || 'http://localhost:8000/storage';
+      profilePhoto = `${storageUrl}/${data.photo_url}`;
+    }
+  } else if (data.profile_photo_url) {
+    // Laravel Jetstream/common convention
+    profilePhoto = data.profile_photo_url;
   }
+
+  return {
+    id: data.id.toString(),
+    name: data.full_name || `${data.first_name} ${data.last_name}`,
+    phone: data.phone || '',
+    email: data.email,
+    dpi: data.dni,
+    notes: data.notes,
+    status: (data.status || 'inactive').toUpperCase() as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
+    membershipEnd: data.membership_end_date,
+    profilePhoto: profilePhoto,
+    fingerprintId: data.fingerprint_id,
+    fingerprintRegisteredAt: data.fingerprint_registered_at,
+    createdAt: data.created_at || new Date().toISOString(),
+  };
 };
 
 export const clientsService = {
-  getAll: (): Client[] => {
-    initializeMockClients();
-    const clients = storage.get<Client[]>(STORAGE_KEYS.CLIENTS) || [];
-    
-    return clients.map(client => ({
-      ...client,
-      status: client.membershipEnd && isExpired(client.membershipEnd) ? 'INACTIVE' : client.status,
-    }));
+  getAll: async (params?: { search?: string; per_page?: number }): Promise<Client[]> => {
+    try {
+      const response = await api.get('/clients', {
+        params: {
+          ...params,
+          per_page: params?.per_page || 100
+        }
+      });
+
+      // Handle Laravel Pagination response
+      const items = response.data.data || [];
+      return items.map(mapClientFromBackend);
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+      return [];
+    }
   },
 
-  getById: (id: string): Client | null => {
-    const clients = clientsService.getAll();
-    return clients.find((c) => c.id === id) || null;
+  getById: async (id: string): Promise<Client | null> => {
+    try {
+      const response = await api.get(`/clients/${id}`);
+      return mapClientFromBackend(response.data);
+    } catch (error) {
+      console.error(`Error fetching client ${id}:`, error);
+      return null;
+    }
   },
 
-  create: (client: Omit<Client, 'id' | 'createdAt'>): Client => {
-    const clients = clientsService.getAll();
-    const newClient: Client = {
-      ...client,
-      id: `CLT-${String(clients.length + 1).padStart(3, '0')}`,
-      createdAt: new Date().toISOString(),
+  create: async (clientData: any): Promise<Client> => {
+    // Map frontend fields to backend fields
+    const payload = {
+      first_name: clientData.name?.split(' ')[0] || 'Unknown', // Simple split fallback
+      last_name: clientData.name?.split(' ').slice(1).join(' ') || 'User',
+      phone: clientData.phone,
+      email: clientData.email,
+      dni: clientData.dpi,
+      notes: clientData.notes,
+      // Add other fields as necessary
+      ...clientData
     };
-    
-    const updatedClients = [...clients, newClient];
-    storage.set(STORAGE_KEYS.CLIENTS, updatedClients);
-    return newClient;
+
+    // If name wasn't pre-split, try to be smarter or expect first_name/last_name from form
+    if (clientData.firstName && clientData.lastName) {
+      payload.first_name = clientData.firstName;
+      payload.last_name = clientData.lastName;
+    }
+
+    const response = await api.post('/clients', payload);
+    return mapClientFromBackend(response.data);
   },
 
-  update: (id: string, updates: Partial<Client>): Client | null => {
-    const clients = clientsService.getAll();
-    const index = clients.findIndex((c) => c.id === id);
-    
-    if (index === -1) return null;
-    
-    const updatedClient = { ...clients[index], ...updates };
-    clients[index] = updatedClient;
-    storage.set(STORAGE_KEYS.CLIENTS, clients);
-    return updatedClient;
+  update: async (id: string, updates: Partial<Client> & any): Promise<Client | null> => {
+    const payload: any = { ...updates };
+
+    // Reverse map common fields if they are present
+    if (updates.name) {
+      const parts = updates.name.split(' ');
+      payload.first_name = parts[0];
+      payload.last_name = parts.slice(1).join(' ');
+    }
+    if (updates.dpi) payload.dni = updates.dpi;
+    if (updates.profilePhoto && updates.profilePhoto.startsWith('data:')) {
+      // Prepare for file upload separately or handle base64 if backend supports it
+      // The current ClientController.uploadPhoto expects a file 'photo'
+      // We might need to handle this differently or assume the hook handles it
+      // For now, let's look at how the component sends it.
+    }
+
+    const response = await api.put(`/clients/${id}`, payload);
+    return mapClientFromBackend(response.data);
   },
 
-  delete: (id: string): boolean => {
-    const clients = clientsService.getAll();
-    const filtered = clients.filter((c) => c.id !== id);
-    
-    if (filtered.length === clients.length) return false;
-    
-    storage.set(STORAGE_KEYS.CLIENTS, filtered);
-    return true;
+  delete: async (id: string): Promise<boolean> => {
+    try {
+      await api.delete(`/clients/${id}`);
+      return true;
+    } catch (error) {
+      console.error('Error deleting client:', error);
+      return false;
+    }
   },
 
-  search: (query: string): Client[] => {
-    const clients = clientsService.getAll();
-    const lowerQuery = query.toLowerCase();
-    
-    return clients.filter(
-      (c) =>
-        c.name.toLowerCase().includes(lowerQuery) ||
-        c.phone.includes(query) ||
-        c.email?.toLowerCase().includes(lowerQuery)
-    );
+  search: async (query: string): Promise<Client[]> => {
+    return clientsService.getAll({ search: query });
   },
 
   generateQR: (clientId: string): string => {
+    // Backend generates the actual QR content, but this might be for display URL
     return `QR-CLIENT-${clientId}`;
   },
+
+  // ─── Fingerprint Methods ───
+
+  registerFingerprint: async (clientId: string, template: string): Promise<any> => {
+    const response = await api.post(`/clients/${clientId}/fingerprint`, {
+      fingerprint_template: template
+    });
+    return response.data;
+  },
+
+  removeFingerprint: async (clientId: string): Promise<any> => {
+    const response = await api.delete(`/clients/${clientId}/fingerprint`);
+    return response.data;
+  },
+
+  getFingerprintStatus: async (clientId: string): Promise<any> => {
+    const response = await api.get(`/clients/${clientId}/fingerprint/status`);
+    return response.data;
+  }
 };

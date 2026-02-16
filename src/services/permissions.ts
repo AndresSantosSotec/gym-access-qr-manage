@@ -1,28 +1,23 @@
 import { authService } from './auth.service';
+import { rolesService } from './roles.service';
 import type { PermissionKey } from '@/types/models';
 
-export const can = (permission: PermissionKey): boolean => {
-  const auth = authService.getCurrentUser();
-  if (!auth || !auth.user) return false;
+export const can = async (permission: PermissionKey): Promise<boolean> => {
+  const auth = await authService.getCurrentUser();
+  if (!auth) return false;
 
-  // Si el usuario tiene la relación role cargada (desde el backend)
-  const role = auth.user.role;
+  const role = await rolesService.getRoleById(auth.user.roleId);
   if (!role) return false;
 
-  // Manejar permisos tanto si vienen como array de strings o array de objetos (slug)
-  const permissions = role.permissions || [];
-
-  return permissions.some(p => {
-    if (typeof p === 'string') return p === permission;
-    // @ts-ignore - Handle backend object format {slug: '...'}
-    return p.slug === permission;
-  });
+  return role.permissions.includes(permission);
 };
 
-export const canAny = (permissions: PermissionKey[]): boolean => {
-  return permissions.some(p => can(p));
+export const canAny = async (permissions: PermissionKey[]): Promise<boolean> => {
+  const results = await Promise.all(permissions.map(p => can(p)));
+  return results.some(r => r);
 };
 
-export const canAll = (permissions: PermissionKey[]): boolean => {
-  return permissions.every(p => can(p));
+export const canAll = async (permissions: PermissionKey[]): Promise<boolean> => {
+  const results = await Promise.all(permissions.map(p => can(p)));
+  return results.every(r => r);
 };

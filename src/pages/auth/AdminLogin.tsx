@@ -4,12 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { authService } from '@/services/auth.service';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { Barbell, SignIn, Eye, EyeSlash } from '@phosphor-icons/react';
 
 export function AdminLogin() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -43,7 +44,7 @@ export function AdminLogin() {
     setIsLoading(true);
 
     try {
-      await authService.login(email, password);
+      await login(email, password);
       toast.success('¡Bienvenido!');
       navigate('/admin/dashboard');
     } catch (error) {

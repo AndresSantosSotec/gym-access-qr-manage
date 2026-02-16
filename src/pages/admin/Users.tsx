@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +13,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { DataTable, ColumnDef } from '@/components/DataTable';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import {
   Select,
   SelectContent,
@@ -23,23 +30,36 @@ import {
 } from '@/components/ui/select';
 import { usersService } from '@/services/users.service';
 import { rolesService } from '@/services/roles.service';
-import type { User } from '@/types/models';
+import type { User, Role } from '@/types/models';
 import { Plus, Pencil, Trash, UserCircle, MagnifyingGlass } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { formatDate } from '@/utils/date';
 
 export function Users() {
-  const [users, setUsers] = useState(usersService.getAllUsers());
-  const [roles] = useState(rolesService.getAllRoles());
+  const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-
+  
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [roleId, setRoleId] = useState('');
   const [active, setActive] = useState(true);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    const [usersData, rolesData] = await Promise.all([
+      usersService.getAllUsers(),
+      rolesService.getAllRoles()
+    ]);
+    setUsers(usersData);
+    setRoles(rolesData);
+  };
 
   const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -72,13 +92,13 @@ export function Users() {
     setEditingUser(null);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim() || !username.trim() || !email.trim() || !roleId) {
       toast.error('Todos los campos son obligatorios');
       return;
     }
 
-    const existingUser = users.find(u =>
+    const existingUser = users.find(u => 
       u.username === username && u.id !== editingUser?.id
     );
 
@@ -88,22 +108,22 @@ export function Users() {
     }
 
     if (editingUser) {
-      usersService.updateUser(editingUser.id, { name, username, email, roleId, active });
+      await usersService.updateUser(editingUser.id, { name, username, email, roleId, active });
       toast.success('Usuario actualizado');
     } else {
-      usersService.createUser({ name, username, email, password: '123456', roleId, active });
+      await usersService.createUser({ name, username, email, roleId, active });
       toast.success('Usuario creado');
     }
 
-    setUsers(usersService.getAllUsers());
+    await loadData();
     handleCloseDialog();
   };
 
-  const handleDelete = (user: User) => {
+  const handleDelete = async (user: User) => {
     if (!confirm(`¿Eliminar el usuario "${user.name}"?`)) return;
 
-    usersService.deleteUser(user.id);
-    setUsers(usersService.getAllUsers());
+    await usersService.deleteUser(user.id);
+    await loadData();
     toast.success('Usuario eliminado');
   };
 
@@ -111,71 +131,6 @@ export function Users() {
     const role = roles.find(r => r.id === roleId);
     return role?.name || 'Sin rol';
   };
-
-  const columns: ColumnDef<User>[] = [
-    {
-      header: 'Nombre',
-      accessorKey: 'name',
-      className: 'font-medium'
-    },
-    {
-      header: 'Usuario',
-      accessorKey: 'username'
-    },
-    {
-      header: 'Email',
-      accessorKey: 'email'
-    },
-    {
-      header: 'Rol',
-      cell: (user) => (
-        <Badge variant="secondary">
-          {getRoleName(user.roleId)}
-        </Badge>
-      )
-    },
-    {
-      header: 'Estado',
-      cell: (user) => (
-        user.active ? (
-          <Badge variant="default">Activo</Badge>
-        ) : (
-          <Badge variant="outline">Inactivo</Badge>
-        )
-      )
-    },
-    {
-      header: 'Creado',
-      cell: (user) => (
-        <span className="text-muted-foreground text-sm">
-          {formatDate(user.createdAt)}
-        </span>
-      )
-    },
-    {
-      header: 'Acciones',
-      headerClassName: 'text-right',
-      className: 'text-right',
-      cell: (user) => (
-        <div className="flex gap-2 justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleOpenEdit(user)}
-          >
-            <Pencil size={16} />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleDelete(user)}
-          >
-            <Trash size={16} />
-          </Button>
-        </div>
-      )
-    }
-  ];
 
   return (
     <div className="p-8 space-y-6">
@@ -204,11 +159,70 @@ export function Users() {
             />
           </div>
 
-          <DataTable
-            data={filteredUsers}
-            columns={columns}
-            emptyMessage={searchTerm ? 'No se encontraron usuarios' : 'No hay usuarios creados'}
-          />
+          {filteredUsers.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <UserCircle size={48} className="mx-auto mb-4 opacity-50" />
+              <p>
+                {searchTerm ? 'No se encontraron usuarios' : 'No hay usuarios creados'}
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Usuario</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Rol</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Creado</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredUsers.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.name}</TableCell>
+                    <TableCell>{user.username}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">
+                        {getRoleName(user.roleId)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {user.active ? (
+                        <Badge variant="default">Activo</Badge>
+                      ) : (
+                        <Badge variant="outline">Inactivo</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {formatDate(user.createdAt)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenEdit(user)}
+                        >
+                          <Pencil size={16} />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDelete(user)}
+                        >
+                          <Trash size={16} />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
