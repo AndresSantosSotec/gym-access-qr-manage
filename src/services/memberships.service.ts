@@ -1,116 +1,228 @@
 import { storage, STORAGE_KEYS } from '@/utils/storage';
+import { api } from './api.service';
 import type { MembershipPlan, Payment } from '@/types/models';
-import { addDays } from '@/utils/date';
-import { clientsService } from './clients.service';
 
 export const membershipsService = {
-  getPlans: (): MembershipPlan[] => {
+  // ============ PLANES - MÉTODOS SÍNCRONOS (cache local) ============
+
+  /**
+   * Obtener planes desde cache local (síncrono, para display)
+   */
+  getPlansSync: (): MembershipPlan[] => {
     return storage.get<MembershipPlan[]>(STORAGE_KEYS.MEMBERSHIP_PLANS) || [];
   },
 
-  getPlanById: (id: string): MembershipPlan | null => {
-    const plans = membershipsService.getPlans();
+  /**
+   * Obtener plan por ID desde cache local (síncrono, para display)
+   */
+  getPlanByIdSync: (id: string): MembershipPlan | null => {
+    const plans = membershipsService.getPlansSync();
     return plans.find((p) => p.id === id) || null;
   },
 
-  getPlanBySlug: (slug: string): MembershipPlan | null => {
-    const plans = membershipsService.getPlans();
-    return plans.find((p) => p.slug === slug) || null;
+  // ============ PLANES - API REAL (asíncrono) ============
+
+  /**
+   * Obtener todos los planes (requiere autenticación)
+   */
+  getPlans: async (): Promise<MembershipPlan[]> => {
+    try {
+      const response = await api.get<any[]>('/membership-plans');
+      const plans = response.data.map(membershipsService.transformPlan);
+      // Guardar en cache local
+      storage.set(STORAGE_KEYS.MEMBERSHIP_PLANS, plans);
+      return plans;
+    } catch (error) {
+      console.warn('Error al obtener planes del backend:', error);
+      // Fallback a localStorage
+      return storage.get<MembershipPlan[]>(STORAGE_KEYS.MEMBERSHIP_PLANS) || [];
+    }
   },
 
-  getPublishedPlans: (): MembershipPlan[] => {
-    const plans = membershipsService.getPlans();
-    return plans.filter((p) => p.published);
+  /**
+   * Obtener planes publicados (público, sin autenticación)
+   */
+  getPublishedPlans: async (): Promise<MembershipPlan[]> => {
+    try {
+      const response = await api.get<MembershipPlan[]>('/public/plans');
+      return response.data;
+    } catch (error) {
+      console.warn('Error al obtener planes públicos:', error);
+      // Fallback a localStorage
+      const plans = storage.get<MembershipPlan[]>(STORAGE_KEYS.MEMBERSHIP_PLANS) || [];
+      return plans.filter((p) => p.published);
+    }
   },
 
-  createPlan: (plan: Omit<MembershipPlan, 'id' | 'createdAt' | 'updatedAt'>): MembershipPlan => {
-    const now = new Date().toISOString();
-    const newPlan: MembershipPlan = {
-      ...plan,
-      id: `PLAN-${Date.now()}`,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const plans = membershipsService.getPlans();
-    storage.set(STORAGE_KEYS.MEMBERSHIP_PLANS, [...plans, newPlan]);
-    return newPlan;
+  /**
+   * Obtener plan por ID
+   */
+  getPlanById: async (id: string): Promise<MembershipPlan | null> => {
+    try {
+      const response = await api.get<any>(`/membership-plans/${id}`);
+      return membershipsService.transformPlan(response.data);
+    } catch (error) {
+      console.warn('Error al obtener plan:', error);
+      const plans = storage.get<MembershipPlan[]>(STORAGE_KEYS.MEMBERSHIP_PLANS) || [];
+      return plans.find((p) => p.id === id) || null;
+    }
   },
 
-  updatePlan: (id: string, updates: Partial<MembershipPlan>): MembershipPlan | null => {
-    const plans = membershipsService.getPlans();
-    const index = plans.findIndex((p) => p.id === id);
-    
-    if (index === -1) return null;
-
-    const updatedPlan = {
-      ...plans[index],
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    };
-
-    plans[index] = updatedPlan;
-    storage.set(STORAGE_KEYS.MEMBERSHIP_PLANS, plans);
-    return updatedPlan;
+  /**
+   * Obtener plan por slug (para página pública)
+   */
+  getPlanBySlug: async (slug: string): Promise<MembershipPlan | null> => {
+    try {
+      const plans = await membershipsService.getPublishedPlans();
+      return plans.find((p) => p.slug === slug) || null;
+    } catch (error) {
+      const plans = storage.get<MembershipPlan[]>(STORAGE_KEYS.MEMBERSHIP_PLANS) || [];
+      return plans.find((p) => p.slug === slug) || null;
+    }
   },
 
-  deletePlan: (id: string): boolean => {
-    const plans = membershipsService.getPlans();
-    const filtered = plans.filter((p) => p.id !== id);
-    
-    if (filtered.length === plans.length) return false;
-
-    storage.set(STORAGE_KEYS.MEMBERSHIP_PLANS, filtered);
-    return true;
+  /**
+   * Crear nuevo plan
+   */
+  createPlan: async (plan: Omit<MembershipPlan, 'id' | 'createdAt' | 'updatedAt'>): Promise<MembershipPlan> => {
+    try {
+      const response = await api.post<any>('/membership-plans', {
+        name: plan.name,
+        slug: plan.slug,
+        price: plan.price,
+        duration_days: plan.durationDays,
+        description: plan.description,
+        features: plan.features,
+        published: plan.published,
+      });
+      return membershipsService.transformPlan(response.data);
+    } catch (error) {
+      console.error('Error al crear plan:', error);
+      throw error;
+    }
   },
 
-  togglePublished: (id: string): MembershipPlan | null => {
-    const plan = membershipsService.getPlanById(id);
-    if (!plan) return null;
+  /**
+   * Actualizar plan
+   */
+  updatePlan: async (id: string, updates: Partial<MembershipPlan>): Promise<MembershipPlan> => {
+    try {
+      const payload: any = {};
+      if (updates.name !== undefined) payload.name = updates.name;
+      if (updates.slug !== undefined) payload.slug = updates.slug;
+      if (updates.price !== undefined) payload.price = updates.price;
+      if (updates.durationDays !== undefined) payload.duration_days = updates.durationDays;
+      if (updates.description !== undefined) payload.description = updates.description;
+      if (updates.features !== undefined) payload.features = updates.features;
+      if (updates.published !== undefined) payload.published = updates.published;
 
+      const response = await api.put<any>(`/membership-plans/${id}`, payload);
+      return membershipsService.transformPlan(response.data);
+    } catch (error) {
+      console.error('Error al actualizar plan:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Eliminar plan
+   */
+  deletePlan: async (id: string): Promise<void> => {
+    await api.delete(`/membership-plans/${id}`);
+  },
+
+  /**
+   * Toggle publicado
+   */
+  togglePublished: async (id: string): Promise<MembershipPlan> => {
+    const plan = await membershipsService.getPlanById(id);
+    if (!plan) throw new Error('Plan no encontrado');
     return membershipsService.updatePlan(id, { published: !plan.published });
   },
 
-  assignMembership: (
+  /**
+   * Transformar datos del backend a formato frontend
+   */
+  transformPlan: (data: any): MembershipPlan => ({
+    id: String(data.id),
+    name: data.name,
+    slug: data.slug,
+    price: parseFloat(data.price),
+    durationDays: data.duration_days || data.durationDays,
+    description: data.description || '',
+    features: data.features || [],
+    published: Boolean(data.published),
+    createdAt: data.created_at || data.createdAt,
+    updatedAt: data.updated_at || data.updatedAt,
+  }),
+
+  // ============ PAGOS Y MEMBRESÍAS (API) ============
+
+  assignMembership: async (
     clientId: string,
     planId: string,
     paymentMethod: Payment['method'],
     amount: number,
-    reference?: string
-  ): Payment | null => {
-    const client = clientsService.getById(clientId);
-    const plan = membershipsService.getPlanById(planId);
-
-    if (!client || !plan) return null;
-
-    const payment: Payment = {
-      id: `PAY-${Date.now()}`,
-      clientId,
-      planId,
+    reference?: string,
+    paymentType: 'single' | 'installments' = 'single',
+    numInstallments?: number,
+    initialPayment?: number,
+  ) => {
+    const response = await api.post('/memberships/assign', {
+      client_id: clientId,
+      plan_id: planId,
+      payment_method: paymentMethod,
       amount,
-      method: paymentMethod,
-      createdAt: new Date().toISOString(),
       reference,
-      status: 'PAID',
-    };
-
-    const payments = storage.get<Payment[]>(STORAGE_KEYS.PAYMENTS) || [];
-    storage.set(STORAGE_KEYS.PAYMENTS, [...payments, payment]);
-
-    const startDate = new Date();
-    const endDate = addDays(startDate, plan.durationDays);
-
-    clientsService.update(clientId, {
-      status: 'ACTIVE',
-      membershipEnd: endDate.toISOString(),
+      payment_type: paymentType,
+      num_installments: numInstallments,
+      initial_payment: initialPayment,
     });
+    return response.data;
+  },
 
-    return payment;
+  // ============ CUOTAS / INSTALLMENTS ============
+
+  getInstallments: async (params?: {
+    client_id?: string;
+    membership_id?: string;
+    status?: string;
+    overdue?: boolean;
+    upcoming?: boolean;
+  }) => {
+    const response = await api.get('/installments', { params });
+    return response.data;
+  },
+
+  getInstallmentSummary: async () => {
+    const response = await api.get('/installments/summary');
+    return response.data;
+  },
+
+  getPaymentPlan: async (membershipId: string) => {
+    const response = await api.get(`/installments/membership/${membershipId}`);
+    return response.data;
+  },
+
+  payInstallment: async (
+    installmentId: number,
+    amount: number,
+    paymentMethod: string,
+    reference?: string,
+    notes?: string,
+  ) => {
+    const response = await api.post(`/installments/${installmentId}/pay`, {
+      amount,
+      payment_method: paymentMethod,
+      reference,
+      notes,
+    });
+    return response.data;
   },
 
   getPaymentsByClient: (clientId: string): Payment[] => {
     const payments = storage.get<Payment[]>(STORAGE_KEYS.PAYMENTS) || [];
-    return payments.filter((p) => p.clientId === clientId).sort((a, b) => 
+    return payments.filter((p) => p.clientId === clientId).sort((a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   },

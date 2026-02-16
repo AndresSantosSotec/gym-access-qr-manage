@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,26 +24,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { DataTable, ColumnDef } from '@/components/DataTable';
 import { membershipsService } from '@/services/memberships.service';
 import { formatCurrency } from '@/utils/date';
-import { Plus, Pencil, Trash, Eye, EyeSlash, CheckCircle } from '@phosphor-icons/react';
+import { Plus, Pencil, Trash, Eye, EyeSlash, CheckCircle, SpinnerGap } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import type { MembershipPlan } from '@/types/models';
 
 export function Memberships() {
-  const [plans, setPlans] = useState(membershipsService.getPlans());
+  const [plans, setPlans] = useState<MembershipPlan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [editingPlan, setEditingPlan] = useState<MembershipPlan | null>(null);
   const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
@@ -53,6 +48,23 @@ export function Memberships() {
     features: [''],
     published: true,
   });
+
+  // Cargar planes al iniciar
+  const loadPlans = async () => {
+    try {
+      const data = await membershipsService.getPlans();
+      setPlans(data);
+    } catch (error) {
+      console.error('Error al cargar planes:', error);
+      toast.error('Error al cargar los planes');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPlans();
+  }, []);
 
   const handleOpenNew = () => {
     setEditingPlan(null);
@@ -82,46 +94,129 @@ export function Memberships() {
     setIsDialogOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name || !formData.slug || !formData.price || !formData.durationDays) {
       toast.error('Por favor completa todos los campos requeridos');
       return;
     }
 
-    const planData = {
-      name: formData.name,
-      slug: formData.slug,
-      price: parseFloat(formData.price),
-      durationDays: parseInt(formData.durationDays),
-      description: formData.description,
-      features: formData.features.filter(f => f.trim() !== ''),
-      published: formData.published,
-    };
+    setSaving(true);
+    try {
+      const planData = {
+        name: formData.name,
+        slug: formData.slug,
+        price: parseFloat(formData.price),
+        durationDays: parseInt(formData.durationDays),
+        description: formData.description,
+        features: formData.features.filter(f => f.trim() !== ''),
+        published: formData.published,
+      };
 
-    if (editingPlan) {
-      membershipsService.updatePlan(editingPlan.id, planData);
-      toast.success('Plan actualizado correctamente');
-    } else {
-      membershipsService.createPlan(planData);
-      toast.success('Plan creado correctamente');
+      if (editingPlan) {
+        await membershipsService.updatePlan(editingPlan.id, planData);
+        toast.success('Plan actualizado correctamente');
+      } else {
+        await membershipsService.createPlan(planData);
+        toast.success('Plan creado correctamente');
+      }
+
+      await loadPlans();
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error('Error al guardar plan:', error);
+      toast.error('Error al guardar el plan');
+    } finally {
+      setSaving(false);
     }
-
-    setPlans(membershipsService.getPlans());
-    setIsDialogOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    membershipsService.deletePlan(id);
-    setPlans(membershipsService.getPlans());
-    setDeletingPlanId(null);
-    toast.success('Plan eliminado correctamente');
+  const handleDelete = async (id: string) => {
+    try {
+      await membershipsService.deletePlan(id);
+      await loadPlans();
+      setDeletingPlanId(null);
+      toast.success('Plan eliminado correctamente');
+    } catch (error) {
+      console.error('Error al eliminar plan:', error);
+      toast.error('Error al eliminar el plan');
+    }
   };
 
-  const handleTogglePublished = (id: string) => {
-    membershipsService.togglePublished(id);
-    setPlans(membershipsService.getPlans());
-    toast.success('Estado de publicación actualizado');
+  const handleTogglePublished = async (id: string) => {
+    try {
+      await membershipsService.togglePublished(id);
+      await loadPlans();
+      toast.success('Estado de publicación actualizado');
+    } catch (error) {
+      console.error('Error al cambiar estado:', error);
+      toast.error('Error al cambiar el estado de publicación');
+    }
   };
+
+  const columns: ColumnDef<MembershipPlan>[] = [
+    {
+      header: 'Nombre',
+      accessorKey: 'name',
+      className: 'font-medium'
+    },
+    {
+      header: 'Precio',
+      cell: (plan) => formatCurrency(plan.price)
+    },
+    {
+      header: 'Duración',
+      cell: (plan) => `${plan.durationDays} días`
+    },
+    {
+      header: 'Slug',
+      cell: (plan) => (
+        <code className="text-xs bg-muted px-2 py-1 rounded">{plan.slug}</code>
+      )
+    },
+    {
+      header: 'Publicado',
+      cell: (plan) => (
+        <Badge variant={plan.published ? 'default' : 'secondary'}>
+          {plan.published ? 'Sí' : 'No'}
+        </Badge>
+      )
+    },
+    {
+      header: 'Acciones',
+      headerClassName: 'text-right',
+      className: 'text-right',
+      cell: (plan) => (
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleTogglePublished(plan.id)}
+            title={plan.published ? 'Ocultar' : 'Publicar'}
+          >
+            {plan.published ? (
+              <EyeSlash size={18} />
+            ) : (
+              <Eye size={18} />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleEdit(plan)}
+          >
+            <Pencil size={18} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setDeletingPlanId(plan.id)}
+          >
+            <Trash size={18} className="text-destructive" />
+          </Button>
+        </div>
+      )
+    }
+  ];
 
   const addFeature = () => {
     setFormData({ ...formData, features: [...formData.features, ''] });
@@ -153,97 +248,56 @@ export function Memberships() {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Planes Activos</CardTitle>
-          <CardDescription>Lista de todos los planes de membresía</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nombre</TableHead>
-                <TableHead>Precio</TableHead>
-                <TableHead>Duración</TableHead>
-                <TableHead>Slug</TableHead>
-                <TableHead>Publicado</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {plans.map((plan) => (
-                <TableRow key={plan.id}>
-                  <TableCell className="font-medium">{plan.name}</TableCell>
-                  <TableCell>{formatCurrency(plan.price)}</TableCell>
-                  <TableCell>{plan.durationDays} días</TableCell>
-                  <TableCell>
-                    <code className="text-xs bg-muted px-2 py-1 rounded">{plan.slug}</code>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={plan.published ? 'default' : 'secondary'}>
-                      {plan.published ? 'Sí' : 'No'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleTogglePublished(plan.id)}
-                        title={plan.published ? 'Ocultar' : 'Publicar'}
-                      >
-                        {plan.published ? (
-                          <EyeSlash size={18} />
-                        ) : (
-                          <Eye size={18} />
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(plan)}
-                      >
-                        <Pencil size={18} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeletingPlanId(plan.id)}
-                      >
-                        <Trash size={18} className="text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <Card className="bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20">
-        <CardHeader>
-          <CardTitle>Planes Publicados en la Web</CardTitle>
-          <CardDescription>Los planes publicados aparecen en /p/planes</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-3">
-          {plans.filter(p => p.published).map((plan) => (
-            <div key={plan.id} className="bg-card p-4 rounded-lg border">
-              <h3 className="font-bold text-lg">{plan.name}</h3>
-              <p className="text-2xl font-bold text-primary mt-2">{formatCurrency(plan.price)}</p>
-              <p className="text-sm text-muted-foreground mt-1">{plan.durationDays} días</p>
-              <ul className="mt-3 space-y-1">
-                {plan.features.slice(0, 3).map((feature, idx) => (
-                  <li key={idx} className="flex items-center gap-2 text-sm">
-                    <CheckCircle size={16} className="text-green-600" weight="fill" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
+      {loading ? (
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center">
+              <SpinnerGap size={48} className="animate-spin text-primary mx-auto" />
+              <p className="mt-4 text-muted-foreground">Cargando planes...</p>
             </div>
-          ))}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Planes Activos</CardTitle>
+              <CardDescription>Lista de todos los planes de membresía</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <DataTable
+                data={plans}
+                columns={columns}
+                emptyMessage="No hay planes de membresía registrados"
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20">
+            <CardHeader>
+              <CardTitle>Planes Publicados en la Web</CardTitle>
+              <CardDescription>Los planes publicados aparecen en /p/planes</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-3">
+              {plans.filter(p => p.published).map((plan) => (
+                <div key={plan.id} className="bg-card p-4 rounded-lg border">
+                  <h3 className="font-bold text-lg">{plan.name}</h3>
+                  <p className="text-2xl font-bold text-primary mt-2">{formatCurrency(plan.price)}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{plan.durationDays} días</p>
+                  <ul className="mt-3 space-y-1">
+                    {plan.features.slice(0, 3).map((feature, idx) => (
+                      <li key={idx} className="flex items-center gap-2 text-sm">
+                        <CheckCircle size={16} className="text-green-600" weight="fill" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -351,11 +405,18 @@ export function Memberships() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={saving}>
               Cancelar
             </Button>
-            <Button onClick={handleSave}>
-              {editingPlan ? 'Actualizar' : 'Crear'}
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? (
+                <>
+                  <SpinnerGap size={18} className="animate-spin mr-2" />
+                  Guardando...
+                </>
+              ) : (
+                editingPlan ? 'Actualizar' : 'Crear'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

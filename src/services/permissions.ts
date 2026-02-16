@@ -1,15 +1,22 @@
 import { authService } from './auth.service';
-import { rolesService } from './roles.service';
 import type { PermissionKey } from '@/types/models';
 
 export const can = (permission: PermissionKey): boolean => {
   const auth = authService.getCurrentUser();
-  if (!auth) return false;
+  if (!auth || !auth.user) return false;
 
-  const role = rolesService.getRoleById(auth.user.roleId);
+  // Si el usuario tiene la relación role cargada (desde el backend)
+  const role = auth.user.role;
   if (!role) return false;
 
-  return role.permissions.includes(permission);
+  // Manejar permisos tanto si vienen como array de strings o array de objetos (slug)
+  const permissions = role.permissions || [];
+
+  return permissions.some(p => {
+    if (typeof p === 'string') return p === permission;
+    // @ts-ignore - Handle backend object format {slug: '...'}
+    return p.slug === permission;
+  });
 };
 
 export const canAny = (permissions: PermissionKey[]): boolean => {

@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from '@/components/ui/sonner';
+import { useThemeColors } from '@/hooks/useThemeColors';
 import { AdminLogin } from '@/pages/auth/AdminLogin';
 import { AdminLayout } from '@/pages/admin/AdminLayout';
 import { Dashboard } from '@/pages/admin/Dashboard';
@@ -10,6 +11,7 @@ import { AccessControl } from '@/pages/admin/AccessControl';
 import { Settings } from '@/pages/admin/Settings';
 import { Leads } from '@/pages/admin/Leads';
 import { Payments } from '@/pages/admin/Payments';
+import { ReceiptsPage } from '@/pages/admin/Receipts';
 import { SiteSettings } from '@/pages/admin/SiteSettings';
 import { BlogAdmin } from '@/pages/admin/BlogAdmin';
 import { Roles } from '@/pages/admin/Roles';
@@ -17,6 +19,14 @@ import { Reports } from '@/pages/admin/Reports';
 import { Notifications } from '@/pages/admin/Notifications';
 import { Cameras } from '@/pages/admin/Cameras';
 import { Fingerprints } from '@/pages/admin/Fingerprints';
+import { Staff } from '@/pages/admin/Staff';
+import { StaffForm } from '@/pages/admin/StaffForm';
+import { Products } from '@/pages/admin/commercial/Products';
+import { ProductForm } from '@/pages/admin/commercial/ProductForm';
+import { Inventory } from '@/pages/admin/commercial/Inventory';
+import { Sales } from '@/pages/admin/commercial/Sales';
+import { SalesHistory } from '@/pages/admin/commercial/SalesHistory';
+import { Catalogs } from '@/pages/admin/commercial/Catalogs';
 import { QrPass } from '@/pages/public/QrPass';
 import { PublicHome } from '@/pages/public/PublicHome';
 import { PublicPlans } from '@/pages/public/PublicPlans';
@@ -27,13 +37,22 @@ import { PublicSubscribe } from '@/pages/public/PublicSubscribe';
 import { PublicContact } from '@/pages/public/PublicContact';
 import { PublicStripeDemoCheckout } from '@/pages/public/PublicStripeDemoCheckout';
 
+import { PermissionGuard } from '@/components/PermissionGuard';
+import { Forbidden } from '@/pages/admin/Forbidden';
+
+function ThemeApplicator() {
+  useThemeColors();
+  return null;
+}
+
 function App() {
   return (
     <BrowserRouter>
+      <ThemeApplicator />
       <Routes>
         <Route path="/" element={<Navigate to="/p" replace />} />
         <Route path="/login" element={<AdminLogin />} />
-        
+
         <Route path="/p" element={<PublicHome />} />
         <Route path="/p/planes" element={<PublicPlans />} />
         <Route path="/p/planes/:slug" element={<PublicPlanDetail />} />
@@ -43,20 +62,73 @@ function App() {
         <Route path="/p/contacto" element={<PublicContact />} />
         <Route path="/p/pago-demo" element={<PublicStripeDemoCheckout />} />
         <Route path="/qr/:clientId" element={<QrPass />} />
-        
+
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="clients" element={<ClientsList />} />
-          <Route path="clients/:id" element={<ClientDetail />} />
-          <Route path="leads" element={<Leads />} />
-          <Route path="memberships" element={<Memberships />} />
-          <Route path="payments" element={<Payments />} />
-          <Route path="access" element={<AccessControl />} />
-          <Route path="fingerprints" element={<Fingerprints />} />
-          <Route path="site" element={<SiteSettings />} />
-          <Route path="blog" element={<BlogAdmin />} />
-          <Route path="roles" element={<Roles />} />
+          <Route path="forbidden" element={<Forbidden />} />
+
+          {/* Dashboard - General access usually */}
+          <Route element={<PermissionGuard permission="DASHBOARD_VIEW" />}>
+            <Route path="dashboard" element={<Dashboard />} />
+          </Route>
+
+          {/* Clientes */}
+          <Route element={<PermissionGuard permission="CLIENTS_VIEW" />}>
+            <Route path="clients" element={<ClientsList />} />
+            <Route path="clients/:id" element={<ClientDetail />} />
+            <Route path="leads" element={<Leads />} />
+          </Route>
+
+          {/* Gestión de Gimnasio */}
+          <Route element={<PermissionGuard permission="MEMBERSHIPS_VIEW" />}>
+            <Route path="memberships" element={<Memberships />} />
+          </Route>
+
+          <Route element={<PermissionGuard permission="PAYMENTS_VIEW" />}>
+            <Route path="payments" element={<Payments />} />
+            <Route path="receipts" element={<ReceiptsPage />} />
+          </Route>
+
+          <Route element={<PermissionGuard permission="ACCESS_VIEW" />}>
+            <Route path="access" element={<AccessControl />} />
+            <Route path="fingerprints" element={<Fingerprints />} />
+          </Route>
+
+          {/* Configuración de Sitio */}
+          <Route element={<PermissionGuard permission="SETTINGS_VIEW" />}>
+            <Route path="site" element={<SiteSettings />} />
+            <Route path="blog" element={<BlogAdmin />} />
+          </Route>
+
+          {/* Roles y Personal (Admin Only usually) */}
+          <Route element={<PermissionGuard permission="ROLES_MANAGE" />}>
+            <Route path="roles" element={<Roles />} />
+          </Route>
+
+          <Route element={<PermissionGuard permission="USERS_VIEW" />}>
+            <Route path="staff" element={<Staff />} />
+            <Route path="staff/new" element={<StaffForm />} />
+            <Route path="staff/edit/:id" element={<StaffForm />} />
+          </Route>
+
+          {/* Módulos Comerciales */}
+          <Route element={<PermissionGuard permission="PRODUCTS_VIEW" />}>
+            <Route path="productos" element={<Products />} />
+            <Route path="productos/nuevo" element={<ProductForm />} />
+            <Route path="productos/editar/:id" element={<ProductForm />} />
+            <Route path="catalogos" element={<Catalogs />} />
+          </Route>
+
+          <Route element={<PermissionGuard permission="INVENTORY_VIEW" />}>
+            <Route path="inventario" element={<Inventory />} />
+          </Route>
+
+          <Route element={<PermissionGuard permission="SALES_VIEW" />}>
+            <Route path="ventas" element={<SalesHistory />} />
+            <Route path="ventas/pos" element={<Sales />} />
+          </Route>
+
+          {/* Otros */}
           <Route path="reports" element={<Reports />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="cameras" element={<Cameras />} />
@@ -65,7 +137,7 @@ function App() {
 
         <Route path="*" element={<Navigate to="/p" replace />} />
       </Routes>
-      
+
       <Toaster position="top-right" richColors />
     </BrowserRouter>
   );

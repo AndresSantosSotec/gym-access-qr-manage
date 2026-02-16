@@ -1,0 +1,552 @@
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Download,
+  FileText,
+  Eye,
+  EnvelopeOpen,
+  DotsThreeVertical,
+  Printer,
+  CheckCircle,
+  Clock,
+  XCircle,
+  MagnifyingGlass,
+  CurrencyDollar,
+} from '@phosphor-icons/react';
+import { receiptsService, type Receipt } from '@/services/receipts.service';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+
+interface FilterState {
+  status: string;
+  paymentType: string;
+  isInvoiced: string;
+  search: string;
+}
+
+/**
+ * Página de administración de recibos y facturas
+ */
+export function ReceiptsPage() {
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [filters, setFilters] = useState<FilterState>({
+    status: 'all',
+    paymentType: 'all',
+    isInvoiced: 'all',
+    search: '',
+  });
+
+  const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<string>('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [emailData, setEmailData] = useState({ email: '', message: '' });
+  const [stats, setStats] = useState({
+    total: 0,
+    paid: 0,
+    pending: 0,
+    invoiced: 0,
+  });
+
+  useEffect(() => {
+    loadReceipts();
+    loadStats();
+  }, [filters]);
+
+  const loadReceipts = async () => {
+    try {
+      setLoading(true);
+      const response = await receiptsService.getAll({
+        status: filters.status === 'all' ? undefined : filters.status || undefined,
+        payment_type: filters.paymentType === 'all' ? undefined : filters.paymentType || undefined,
+        is_invoiced: filters.isInvoiced === 'all' ? undefined : (filters.isInvoiced === 'true'),
+      });
+      
+      let filtered = response.data;
+      if (filters.search) {
+        const search = filters.search.toLowerCase();
+        filtered = filtered.filter(r =>
+          r.receipt_number.toLowerCase().includes(search) ||
+          r.invoice_number?.toLowerCase().includes(search) ||
+          r.client?.name.toLowerCase().includes(search)
+        );
+      }
+      
+      setReceipts(filtered);
+    } catch (error) {
+      toast.error('Error cargando recibos');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      const data = await receiptsService.statistics();
+      setStats(data);
+    } catch (error) {
+      console.error('Error loading stats', error);
+    }
+  };
+
+  const handleDownloadReceipt = async (receipt: Receipt) => {
+    try {
+      const blob = await receiptsService.downloadReceiptPdf(receipt.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${receipt.receipt_number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Recibo descargado');
+    } catch (error) {
+      toast.error('Error descargando recibo');
+    }
+  };
+
+  const handleDownloadInvoice = async (receipt: Receipt) => {
+    try {
+      const blob = await receiptsService.downloadInvoicePdf(receipt.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${receipt.invoice_number || receipt.receipt_number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Factura descargada');
+    } catch (error) {
+      toast.error('Error descargando factura');
+    }
+  };
+
+  const handlePreview = async (receipt: Receipt, isInvoice: boolean = false) => {
+    try {
+      setPreviewLoading(true);
+      setSelectedReceipt(receipt);
+      const html = isInvoice
+        ? await receiptsService.previewInvoice(receipt.id)
+        : await receiptsService.previewReceipt(receipt.id);
+      setPreviewHtml(html);
+      setPreviewOpen(true);
+    } catch (error) {
+      toast.error('Error cargando preview');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handlePrint = () => {
+    const printWindow = window.open('', '', 'width=800,height=600');
+    if (printWindow) {
+      printWindow.document.write(previewHtml);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+      }, 250);
+    }
+  };
+
+  const handleSendEmail = async (receipt: Receipt) => {
+    setSelectedReceipt(receipt);
+    setEmailData({ email: receipt.client?.email || '', message: '' });
+    setEmailOpen(true);
+  };
+
+  const submitEmail = async () => {
+    if (!selectedReceipt || !emailData.email) {
+      toast.error('Ingrese un correo válido');
+      return;
+    }
+    try {
+      await receiptsService.emailReceipt(selectedReceipt.id, emailData.email, emailData.message);
+      toast.success('Recibo enviado por correo');
+      setEmailOpen(false);
+    } catch (error) {
+      toast.error('Error enviando recibo');
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    const variants: Record<string, any> = {
+      draft: 'secondary',
+      pending: 'outline',
+      paid: 'default',
+      cancelled: 'destructive',
+    };
+
+    const labels: Record<string, string> = {
+      draft: 'Borrador',
+      pending: 'Pendiente',
+      paid: 'Pagado',
+      cancelled: 'Cancelado',
+    };
+
+    return (
+      <Badge variant={variants[status] || 'outline'}>
+        {labels[status] || status}
+      </Badge>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total de Recibos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.total}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Pagados
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{stats.paid}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Pendientes
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Facturados
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">{stats.invoiced}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Filtros</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="text-sm font-medium">Buscar</label>
+              <div className="flex gap-2 mt-1">
+                <Input
+                  placeholder="Número, cliente..."
+                  value={filters.search}
+                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                  className="flex-1"
+                />
+                <Button variant="outline" size="icon">
+                  <MagnifyingGlass className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Estado</label>
+              <Select value={filters.status} onValueChange={(v) => setFilters({ ...filters, status: v })}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Todos los estados" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="draft">Borrador</SelectItem>
+                  <SelectItem value="pending">Pendiente</SelectItem>
+                  <SelectItem value="paid">Pagado</SelectItem>
+                  <SelectItem value="cancelled">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Tipo de Pago</label>
+              <Select value={filters.paymentType} onValueChange={(v) => setFilters({ ...filters, paymentType: v })}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Todos los tipos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="subscription">Membresía</SelectItem>
+                  <SelectItem value="individual_payment">Pago Individual</SelectItem>
+                  <SelectItem value="course">Curso</SelectItem>
+                  <SelectItem value="product">Producto</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Facturación</label>
+              <Select value={filters.isInvoiced} onValueChange={(v) => setFilters({ ...filters, isInvoiced: v })}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="true">Facturado</SelectItem>
+                  <SelectItem value="false">No Facturado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Recibos y Facturas</CardTitle>
+              <CardDescription>
+                {loading ? 'Cargando...' : `${receipts.length} recibos encontrados`}
+              </CardDescription>
+            </div>
+            <Button size="sm">
+              <FundsIn className="w-4 h-4 mr-2" />
+              Generar Reporte
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Número</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead className="text-right">Monto</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Facturado</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8">
+                      Cargando...
+                    </TableCell>
+                  </TableRow>
+                ) : receipts.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8">
+                      No hay recibos disponibles
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  receipts.map((receipt) => (
+                    <TableRow key={receipt.id}>
+                      <TableCell className="font-mono text-sm font-semibold">
+                        {receipt.receipt_number}
+                      </TableCell>
+                      <TableCell>{receipt.client?.name || '-'}</TableCell>
+                      <TableCell className="text-right font-bold">
+                        Q{receipt.total.toFixed(2)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize text-xs">
+                          {receipt.type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{getStatusBadge(receipt.status)}</TableCell>
+                      <TableCell>
+                        {receipt.is_invoiced ? (
+                          <Badge className="bg-blue-600 text-xs">
+                            {receipt.invoice_number}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {new Date(receipt.created_at).toLocaleDateString('es-GT')}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <DotsThreeVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuItem onClick={() => handlePreview(receipt)}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              Ver Recibo
+                            </DropdownMenuItem>
+
+                            {receipt.is_invoiced && (
+                              <DropdownMenuItem onClick={() => handlePreview(receipt, true)}>
+                                <Eye className="w-4 h-4 mr-2" />
+                                Ver Factura
+                              </DropdownMenuItem>
+                            )}
+
+                            <DropdownMenuSeparator />
+
+                            <DropdownMenuItem onClick={() => handleDownloadReceipt(receipt)}>
+                              <Download className="w-4 h-4 mr-2" />
+                              Descargar PDF
+                            </DropdownMenuItem>
+
+                            {receipt.is_invoiced && (
+                              <DropdownMenuItem onClick={() => handleDownloadInvoice(receipt)}>
+                                <FileText className="w-4 h-4 mr-2" />
+                                Descargar Factura
+                              </DropdownMenuItem>
+                            )}
+
+                            <DropdownMenuSeparator />
+
+                            <DropdownMenuItem onClick={() => handleSendEmail(receipt)}>
+                              <EnvelopeOpen className="w-4 h-4 mr-2" />
+                              Enviar por Email
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedReceipt ? `${selectedReceipt.receipt_number} - ${selectedReceipt.client?.name}` : 'Vista Previa'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex gap-2 mb-4">
+            <Button onClick={handlePrint} disabled={previewLoading}>
+              <Printer className="w-4 h-4 mr-2" />
+              Imprimir
+            </Button>
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>
+              Cerrar
+            </Button>
+          </div>
+
+          {previewLoading ? (
+            <div className="text-center py-8">Cargando vista previa...</div>
+          ) : (
+            <div
+              className="border rounded-lg p-4 bg-white"
+              dangerouslySetInnerHTML={{ __html: previewHtml }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Email Dialog */}
+      <Dialog open={emailOpen} onOpenChange={setEmailOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enviar Recibo por Email</DialogTitle>
+            <DialogDescription>
+              {selectedReceipt?.receipt_number} - {selectedReceipt?.client?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Correo Electrónico</label>
+              <Input
+                type="email"
+                placeholder="cliente@example.com"
+                value={emailData.email}
+                onChange={(e) => setEmailData({ ...emailData, email: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Mensaje (Opcional)</label>
+              <textarea
+                className="w-full px-3 py-2 border rounded-md text-sm"
+                rows={4}
+                placeholder="Mensaje personalizado..."
+                value={emailData.message}
+                onChange={(e) => setEmailData({ ...emailData, message: e.target.value })}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEmailOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={submitEmail}>
+                <EnvelopeOpen className="w-4 h-4 mr-2" />
+                Enviar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+export default ReceiptsPage;

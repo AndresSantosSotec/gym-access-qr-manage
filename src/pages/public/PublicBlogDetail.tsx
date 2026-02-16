@@ -1,18 +1,43 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import { PublicNavbar } from '@/components/PublicNavbar';
 import { PublicFooter } from '@/components/PublicFooter';
 import { blogService } from '@/services/blog.service';
 import { ArrowLeft, Calendar } from '@phosphor-icons/react';
 import { formatDate } from '@/utils/date';
+import type { BlogPost } from '@/types/blog';
 
 export function PublicBlogDetail() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const post = slug ? blogService.getPostBySlug(slug) : null;
+  const [post, setPost] = useState<BlogPost | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  if (!post || !post.published) {
+  useEffect(() => {
+    const loadPost = async () => {
+      if (!slug) return;
+      try {
+        const response = await blogService.getAllPosts(); // Ideally backend should support slug lookup
+        const posts = response.data || response;
+        const found = Array.isArray(posts) ? posts.find((p: BlogPost) => p.slug === slug) : null;
+        setPost(found || null);
+      } catch (error) {
+        console.error("Error loading post", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadPost();
+  }, [slug]);
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
+  }
+
+  if (!post || post.status !== 'published') {
     return (
       <div className="min-h-screen flex flex-col">
         <PublicNavbar />
@@ -36,6 +61,12 @@ export function PublicBlogDetail() {
     );
   }
 
+  // Combine featured image and gallery images for the carousel
+  const allImages = [
+    ...(post.featured_image ? [{ id: 'featured', image_path: post.featured_image, isFeatured: true }] : []),
+    ...(post.images || []).map(img => ({ ...img, isFeatured: false }))
+  ];
+
   return (
     <div className="min-h-screen flex flex-col">
       <PublicNavbar />
@@ -56,17 +87,35 @@ export function PublicBlogDetail() {
 
         <article className="px-4 pb-16">
           <div className="container mx-auto max-w-4xl">
-            {post.coverImageUrl && (
-              <img
-                src={post.coverImageUrl}
-                alt={post.title}
-                className="w-full h-96 object-cover rounded-lg mb-8"
-              />
+            {allImages.length > 0 && (
+              <div className="mb-8">
+                <Carousel className="w-full">
+                  <CarouselContent>
+                    {allImages.map((img) => (
+                      <CarouselItem key={img.id}>
+                        <div className="relative aspect-video w-full overflow-hidden rounded-lg">
+                          <img
+                            src={img.isFeatured && /^http/.test(img.image_path) ? img.image_path : `/storage/${img.image_path}`}
+                            alt={post.title}
+                            className="object-cover w-full h-full"
+                          />
+                        </div>
+                      </CarouselItem>
+                    ))}
+                  </CarouselContent>
+                  {allImages.length > 1 && (
+                    <>
+                      <CarouselPrevious />
+                      <CarouselNext />
+                    </>
+                  )}
+                </Carousel>
+              </div>
             )}
 
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
               <Calendar size={16} weight="fill" />
-              {formatDate(post.createdAt)}
+              {formatDate(post.created_at)}
             </div>
 
             <h1 className="text-5xl font-bold mb-6">{post.title}</h1>

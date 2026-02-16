@@ -1,9 +1,19 @@
 import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { Barbell, InstagramLogo, Phone, WhatsappLogo } from '@phosphor-icons/react';
 import { siteService } from '@/services/site.service';
+import type { SiteConfig } from '@/types/models';
 
 export function PublicFooter() {
-  const config = siteService.getConfig();
+  const [config, setConfig] = useState<SiteConfig>(siteService.getDefaultConfig());
+
+  useEffect(() => {
+    const loadConfig = async () => {
+      const loadedConfig = await siteService.getConfig();
+      setConfig(loadedConfig);
+    };
+    loadConfig();
+  }, []);
 
   return (
     <footer className="bg-card border-t border-border mt-auto">
@@ -20,7 +30,7 @@ export function PublicFooter() {
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              {config.aboutText.slice(0, 120)}...
+              {config.aboutText?.slice(0, 120)}...
             </p>
           </div>
 

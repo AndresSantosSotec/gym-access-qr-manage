@@ -1,16 +1,50 @@
+import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PublicNavbar } from '@/components/PublicNavbar';
 import { PublicFooter } from '@/components/PublicFooter';
 import { membershipsService } from '@/services/memberships.service';
+import { PlanDetailSkeleton } from '@/components/skeletons';
 import { CheckCircle, ArrowLeft } from '@phosphor-icons/react';
 import { formatCurrency } from '@/utils/date';
+import type { MembershipPlan } from '@/types/models';
 
 export function PublicPlanDetail() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const plan = slug ? membershipsService.getPlanBySlug(slug) : null;
+  const [plan, setPlan] = useState<MembershipPlan | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadPlan = async () => {
+      if (!slug) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const loadedPlan = await membershipsService.getPlanBySlug(slug);
+        setPlan(loadedPlan);
+      } catch (error) {
+        console.error('Error al cargar plan:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadPlan();
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <PublicNavbar />
+        <main className="flex-1 py-8 px-4">
+          <PlanDetailSkeleton />
+        </main>
+        <PublicFooter />
+      </div>
+    );
+  }
 
   if (!plan || !plan.published) {
     return (

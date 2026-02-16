@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PublicNavbar } from '@/components/PublicNavbar';
@@ -8,7 +9,28 @@ import { Article, Calendar } from '@phosphor-icons/react';
 import { formatDate } from '@/utils/date';
 
 export function PublicBlog() {
-  const posts = blogService.getPublishedPosts();
+  const [posts, setPosts] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadPosts = async () => {
+      try {
+        const response = await blogService.getAllPosts();
+        // Handle paginated response structure if necessary, assuming array for now or data property
+        const allPosts = response.data || response;
+        const published = Array.isArray(allPosts)
+          ? allPosts.filter((p: any) => p.status === 'published')
+            .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          : [];
+        setPosts(published);
+      } catch (error) {
+        console.error('Error al cargar posts:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadPosts();
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col">

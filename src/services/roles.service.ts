@@ -1,60 +1,43 @@
-import { storage, STORAGE_KEYS } from '@/utils/storage';
+import api from './api.service';
 import type { Role, PermissionKey } from '@/types/models';
 
-const ROLES_KEY = 'gymflow_roles';
+// Helper to map backend to frontend
+const mapRole = (backendRole: any): Role => ({
+  ...backendRole,
+  id: String(backendRole.id),
+  createdAt: backendRole.created_at,
+});
 
 export const rolesService = {
-  getAllRoles: (): Role[] => {
-    return storage.get<Role[]>(ROLES_KEY) || [];
+  getAllRoles: async (): Promise<Role[]> => {
+    const response = await api.get<any[]>('/roles');
+    return response.data.map(mapRole);
   },
 
-  getRoleById: (id: string): Role | undefined => {
-    const roles = rolesService.getAllRoles();
-    return roles.find(r => r.id === id);
+  getRoleById: async (id: string): Promise<Role> => {
+    const response = await api.get<any>(`/roles/${id}`);
+    return mapRole(response.data);
   },
 
-  createRole: (data: Omit<Role, 'id' | 'createdAt'>): Role => {
-    const roles = rolesService.getAllRoles();
-    
-    const newRole: Role = {
-      ...data,
-      id: `role-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-    };
-
-    const updated = [...roles, newRole];
-    storage.set(ROLES_KEY, updated);
-    
-    return newRole;
+  createRole: async (data: Omit<Role, 'id' | 'createdAt'>): Promise<Role> => {
+    const response = await api.post<any>('/roles', data);
+    return mapRole(response.data);
   },
 
-  updateRole: (id: string, data: Partial<Omit<Role, 'id' | 'createdAt'>>): Role | null => {
-    const roles = rolesService.getAllRoles();
-    const index = roles.findIndex(r => r.id === id);
-    
-    if (index === -1) return null;
-
-    const updated = roles.map(r => 
-      r.id === id ? { ...r, ...data } : r
-    );
-    
-    storage.set(ROLES_KEY, updated);
-    return updated[index];
+  updateRole: async (id: string, data: Partial<Omit<Role, 'id' | 'createdAt'>>): Promise<Role> => {
+    const response = await api.put<any>(`/roles/${id}`, data);
+    return mapRole(response.data);
   },
 
-  deleteRole: (id: string): boolean => {
-    const roles = rolesService.getAllRoles();
-    const filtered = roles.filter(r => r.id !== id);
-    
-    if (filtered.length === roles.length) return false;
-    
-    storage.set(ROLES_KEY, filtered);
-    return true;
+  deleteRole: async (id: string): Promise<void> => {
+    await api.delete(`/roles/${id}`);
   },
 
-  hasPermission: (roleId: string, permission: PermissionKey): boolean => {
-    const role = rolesService.getRoleById(roleId);
+  hasPermission: async (roleId: string, permission: PermissionKey): Promise<boolean> => {
+    const role = await rolesService.getRoleById(roleId);
     if (!role) return false;
-    return role.permissions.includes(permission);
+    // Assuming backend return permissions as array of objects with slug
+    const permissionSlugs = (role.permissions as any).map((p: any) => p.slug || p);
+    return permissionSlugs.includes(permission);
   },
 };

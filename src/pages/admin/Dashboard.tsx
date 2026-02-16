@@ -13,8 +13,14 @@ import {
   CheckCircle,
   XCircle,
 } from '@phosphor-icons/react';
+import { authService } from '@/services/auth.service';
+import { can } from '@/services/permissions';
+import type { PermissionKey } from '@/types/models';
 
 export function Dashboard() {
+  const auth = authService.getCurrentUser();
+  const userName = auth?.user?.name || 'Usuario';
+
   const clients = useMemo(() => clientsService.getAll(), []);
   const payments = useMemo(() => membershipsService.getAllPayments(), []);
   const recentLogs = useMemo(() => accessService.getRecentLogs(10), []);
@@ -38,6 +44,7 @@ export function Dashboard() {
       icon: Users,
       color: 'text-green-600',
       bgColor: 'bg-green-50',
+      permission: 'CLIENTS_VIEW' as PermissionKey,
     },
     {
       title: 'Miembros Inactivos',
@@ -45,6 +52,7 @@ export function Dashboard() {
       icon: UserMinus,
       color: 'text-red-600',
       bgColor: 'bg-red-50',
+      permission: 'CLIENTS_VIEW' as PermissionKey,
     },
     {
       title: 'Ingresos del Mes',
@@ -52,35 +60,40 @@ export function Dashboard() {
       icon: CurrencyDollar,
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
+      permission: 'PAYMENTS_VIEW' as PermissionKey,
     },
-  ];
+  ].filter(m => !m.permission || can(m.permission));
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">
-          Visión general de tu gimnasio
+      <div className="flex flex-col gap-1">
+        <h1 className="text-3xl font-bold tracking-tight">
+          ¡Bienvenido de nuevo, <span className="text-primary">{userName}</span>! 👋
+        </h1>
+        <p className="text-muted-foreground text-lg">
+          Aquí tienes el resumen de hoy en <span className="font-semibold text-foreground">GymFlow</span>.
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {metrics.map((metric) => (
-          <Card key={metric.title}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {metric.title}
-              </CardTitle>
-              <div className={`p-2 rounded-lg ${metric.bgColor}`}>
-                <metric.icon className={metric.color} size={20} weight="bold" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{metric.value}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {metrics.length > 0 && (
+        <div className="grid gap-6 md:grid-cols-3">
+          {metrics.map((metric) => (
+            <Card key={metric.title} className="hover:shadow-md transition-shadow border-primary/10">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                  {metric.title}
+                </CardTitle>
+                <div className={`p-2 rounded-lg ${metric.bgColor}`}>
+                  <metric.icon className={metric.color} size={20} weight="bold" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{metric.value}</div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <Card>
         <CardHeader>

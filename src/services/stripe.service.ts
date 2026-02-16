@@ -10,7 +10,7 @@ export const stripeService = {
     clientId?: string,
     leadId?: string
   ): StripeSession => {
-    const plan = membershipsService.getPlanById(planId);
+    const plan = membershipsService.getPlanByIdSync(planId);
     if (!plan) throw new Error('Plan not found');
 
     const session: StripeSession = {
@@ -63,7 +63,7 @@ export const stripeService = {
     storage.set(STORAGE_KEYS.PAYMENTS, [...payments, payment]);
 
     if (session.clientId) {
-      const plan = membershipsService.getPlanById(session.planId);
+      const plan = membershipsService.getPlanByIdSync(session.planId);
       if (plan) {
         const startDate = new Date();
         const endDate = addDays(startDate, plan.durationDays);

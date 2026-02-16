@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -5,11 +6,28 @@ import { Badge } from '@/components/ui/badge';
 import { PublicNavbar } from '@/components/PublicNavbar';
 import { PublicFooter } from '@/components/PublicFooter';
 import { membershipsService } from '@/services/memberships.service';
+import { PlansGridSkeleton } from '@/components/skeletons';
 import { CheckCircle } from '@phosphor-icons/react';
 import { formatCurrency } from '@/utils/date';
+import type { MembershipPlan } from '@/types/models';
 
 export function PublicPlans() {
-  const plans = membershipsService.getPublishedPlans();
+  const [plans, setPlans] = useState<MembershipPlan[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPlans = async () => {
+      try {
+        const data = await membershipsService.getPublishedPlans();
+        setPlans(data);
+      } catch (error) {
+        console.error('Error al cargar planes:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPlans();
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -29,7 +47,9 @@ export function PublicPlans() {
 
         <section className="py-16 px-4">
           <div className="container mx-auto">
-            {plans.length === 0 ? (
+            {loading ? (
+              <PlansGridSkeleton count={3} />
+            ) : plans.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-xl text-muted-foreground">
                   No hay planes disponibles en este momento

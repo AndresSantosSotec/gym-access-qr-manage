@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,15 +15,33 @@ import { PublicNavbar } from '@/components/PublicNavbar';
 import { PublicFooter } from '@/components/PublicFooter';
 import { membershipsService } from '@/services/memberships.service';
 import { leadsService } from '@/services/leads.service';
+import { SubscribeFormSkeleton } from '@/components/skeletons';
 import { CheckCircle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
+import type { MembershipPlan } from '@/types/models';
 
 export function PublicSubscribe() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const planSlug = searchParams.get('plan') || '';
 
-  const plans = membershipsService.getPublishedPlans();
+  const [plans, setPlans] = useState<MembershipPlan[]>([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
+
+  useEffect(() => {
+    const loadPlans = async () => {
+      try {
+        const data = await membershipsService.getPublishedPlans();
+        setPlans(data);
+      } catch (error) {
+        console.error('Error al cargar planes:', error);
+      } finally {
+        setLoadingPlans(false);
+      }
+    };
+    loadPlans();
+  }, []);
+
   const selectedPlan = plans.find(p => p.slug === planSlug);
 
   const [formData, setFormData] = useState({
@@ -71,16 +89,19 @@ export function PublicSubscribe() {
               </p>
             </div>
 
-            <div className="grid gap-8 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Información de Contacto</CardTitle>
-                  <CardDescription>
-                    Completa tus datos para que podamos contactarte
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleSubmit} className="space-y-4">
+            {loadingPlans ? (
+              <SubscribeFormSkeleton />
+            ) : (
+              <div className="grid gap-8 md:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Información de Contacto</CardTitle>
+                    <CardDescription>
+                      Completa tus datos para que podamos contactarte
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="name">Nombre Completo *</Label>
                       <Input
@@ -154,81 +175,82 @@ export function PublicSubscribe() {
                     <Button type="submit" className="w-full" size="lg">
                       Enviar Solicitud
                     </Button>
-                  </form>
-                </CardContent>
-              </Card>
-
-              <div className="space-y-6">
-                {selectedPlan && (
-                  <Card className="bg-gradient-to-br from-primary/10 to-accent/5">
-                    <CardHeader>
-                      <CardTitle>Plan Seleccionado</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div>
-                        <h3 className="text-2xl font-bold">{selectedPlan.name}</h3>
-                        <p className="text-muted-foreground mt-1">{selectedPlan.description}</p>
-                      </div>
-                      <div className="text-4xl font-bold text-primary">
-                        Q{selectedPlan.price}
-                      </div>
-                      <ul className="space-y-2">
-                        {selectedPlan.features.map((feature, idx) => (
-                          <li key={idx} className="flex items-center gap-2">
-                            <CheckCircle size={18} className="text-green-600" weight="fill" />
-                            <span className="text-sm">{feature}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </CardContent>
-                  </Card>
-                )}
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>¿Qué sigue?</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 text-sm">
-                    <div className="flex gap-3">
-                      <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span className="font-bold text-primary">1</span>
-                      </div>
-                      <div>
-                        <p className="font-medium">Recibimos tu solicitud</p>
-                        <p className="text-muted-foreground">Inmediatamente</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-3">
-                      <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span className="font-bold text-primary">2</span>
-                      </div>
-                      <div>
-                        <p className="font-medium">Te contactamos</p>
-                        <p className="text-muted-foreground">En menos de 24 horas</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-3">
-                      <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span className="font-bold text-primary">3</span>
-                      </div>
-                      <div>
-                        <p className="font-medium">Coordinas el pago</p>
-                        <p className="text-muted-foreground">Con nuestro equipo</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-3">
-                      <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span className="font-bold text-primary">4</span>
-                      </div>
-                      <div>
-                        <p className="font-medium">¡Comienza a entrenar!</p>
-                        <p className="text-muted-foreground">Mismo día si lo deseas</p>
-                      </div>
-                    </div>
+                    </form>
                   </CardContent>
                 </Card>
+
+                <div className="space-y-6">
+                  {selectedPlan && (
+                    <Card className="bg-gradient-to-br from-primary/10 to-accent/5">
+                      <CardHeader>
+                        <CardTitle>Plan Seleccionado</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div>
+                          <h3 className="text-2xl font-bold">{selectedPlan.name}</h3>
+                          <p className="text-muted-foreground mt-1">{selectedPlan.description}</p>
+                        </div>
+                        <div className="text-4xl font-bold text-primary">
+                          Q{selectedPlan.price}
+                        </div>
+                        <ul className="space-y-2">
+                          {selectedPlan.features.map((feature, idx) => (
+                            <li key={idx} className="flex items-center gap-2">
+                              <CheckCircle size={18} className="text-green-600" weight="fill" />
+                              <span className="text-sm">{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>¿Qué sigue?</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm">
+                      <div className="flex gap-3">
+                        <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center flex-shrink-0">
+                          <span className="font-bold text-primary">1</span>
+                        </div>
+                        <div>
+                          <p className="font-medium">Recibimos tu solicitud</p>
+                          <p className="text-muted-foreground">Inmediatamente</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-3">
+                        <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center flex-shrink-0">
+                          <span className="font-bold text-primary">2</span>
+                        </div>
+                        <div>
+                          <p className="font-medium">Te contactamos</p>
+                          <p className="text-muted-foreground">En menos de 24 horas</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-3">
+                        <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center flex-shrink-0">
+                          <span className="font-bold text-primary">3</span>
+                        </div>
+                        <div>
+                          <p className="font-medium">Coordinas el pago</p>
+                          <p className="text-muted-foreground">Con nuestro equipo</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-3">
+                        <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center flex-shrink-0">
+                          <span className="font-bold text-primary">4</span>
+                        </div>
+                        <div>
+                          <p className="font-medium">¡Comienza a entrenar!</p>
+                          <p className="text-muted-foreground">Mismo día si lo deseas</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </section>
       </main>

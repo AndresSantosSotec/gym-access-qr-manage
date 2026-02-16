@@ -54,12 +54,13 @@ import {
   Warning,
   PencilSimple,
 } from '@phosphor-icons/react';
-import type { Client, EconomicProfileItem } from '@/types/models';
+import type { Client, EconomicProfileItem, MembershipPlan } from '@/types/models';
 
 export function ClientDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [client, setClient] = useState<Client | null>(null);
+  const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [isMembershipDialogOpen, setIsMembershipDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isFingerprintDialogOpen, setIsFingerprintDialogOpen] = useState(false);
@@ -71,6 +72,10 @@ export function ClientDetail() {
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'TRANSFER'>('CASH');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
+  const [paymentType, setPaymentType] = useState<'single' | 'installments'>('single');
+  const [numInstallments, setNumInstallments] = useState('3');
+  const [initialPayment, setInitialPayment] = useState('');
+  const [isAssigning, setIsAssigning] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [economicItems, setEconomicItems] = useState<EconomicProfileItem[]>([]);
   const [economicForm, setEconomicForm] = useState({
@@ -89,9 +94,21 @@ export function ClientDetail() {
     status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
   });
 
-  const plans = membershipsService.getPlans();
   const payments = client ? membershipsService.getPaymentsByClient(client.id) : [];
   const accessLogs = client ? accessService.getLogsByClient(client.id) : [];
+
+  // Cargar planes de membresía
+  useEffect(() => {
+    const loadPlans = async () => {
+      try {
+        const data = await membershipsService.getPlans();
+        setPlans(data);
+      } catch (error) {
+        console.error('Error al cargar planes:', error);
+      }
+    };
+    loadPlans();
+  }, []);
 
   useEffect(() => {
     if (id) {
@@ -167,12 +184,12 @@ export function ClientDetail() {
     if (!client) return;
     const fingerprintId = `FP-${client.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const registeredAt = new Date().toISOString();
-    
+
     clientsService.update(client.id, {
       fingerprintId,
       fingerprintRegisteredAt: registeredAt,
     });
-    
+
     setClient({ ...client, fingerprintId, fingerprintRegisteredAt: registeredAt });
     setIsFingerprintDialogOpen(false);
     toast.success('Huella digital registrada (demo)');
@@ -213,7 +230,7 @@ export function ClientDetail() {
     toast.success('QR generado - Se abrió en nueva pestaña');
   };
 
-  const handleAssignMembership = (e: React.FormEvent) => {
+  const handleAssignMembership = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!client || !selectedPlanId) {
@@ -222,27 +239,38 @@ export function ClientDetail() {
     }
 
     const amount = parseFloat(paymentAmount);
-    if (!amount || amount <= 0) {
+    if (paymentType === 'single' && (!amount || amount <= 0)) {
       toast.error('Ingresa un monto válido');
       return;
     }
 
-    const payment = membershipsService.assignMembership(
-      client.id,
-      selectedPlanId,
-      paymentMethod,
-      amount,
-      paymentReference
-    );
+    setIsAssigning(true);
+    try {
+      const result = await membershipsService.assignMembership(
+        client.id,
+        selectedPlanId,
+        paymentMethod,
+        paymentType === 'single' ? amount : 0,
+        paymentReference || undefined,
+        paymentType,
+        paymentType === 'installments' ? parseInt(numInstallments) : undefined,
+        paymentType === 'installments' && initialPayment ? parseFloat(initialPayment) : undefined,
+      );
 
-    if (payment) {
       const updatedClient = clientsService.getById(client.id);
       setClient(updatedClient);
       setIsMembershipDialogOpen(false);
       setSelectedPlanId('');
       setPaymentAmount('');
       setPaymentReference('');
-      toast.success('Membresía asignada exitosamente');
+      setPaymentType('single');
+      setNumInstallments('3');
+      setInitialPayment('');
+      toast.success(result.message || 'Membresía asignada exitosamente');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Error al asignar membresía');
+    } finally {
+      setIsAssigning(false);
     }
   };
 
@@ -754,7 +782,7 @@ export function ClientDetail() {
               ) : (
                 <div className="space-y-3">
                   {payments.map((payment) => {
-                    const plan = membershipsService.getPlanById(payment.planId);
+                    const plan = membershipsService.getPlanByIdSync(payment.planId);
                     return (
                       <div key={payment.id} className="p-4 border border-border rounded-lg">
                         <div className="flex justify-between items-start">
@@ -888,15 +916,19 @@ export function ClientDetail() {
       </Dialog>
 
       <Dialog open={isMembershipDialogOpen} onOpenChange={setIsMembershipDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Asignar Membresía</DialogTitle>
-            <DialogDescription>Selecciona un plan y registra el pago</DialogDescription>
+            <DialogDescription>Selecciona un plan, tipo de pago y registra la transacción</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAssignMembership} className="space-y-4">
             <div className="space-y-2">
               <Label>Plan de Membresía</Label>
-              <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
+              <Select value={selectedPlanId} onValueChange={(v) => {
+                setSelectedPlanId(v);
+                const plan = plans.find(p => p.id === v);
+                if (plan && paymentType === 'single') setPaymentAmount(plan.price.toString());
+              }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona un plan" />
                 </SelectTrigger>
@@ -909,6 +941,37 @@ export function ClientDetail() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Payment Type Toggle */}
+            <div className="space-y-2">
+              <Label>Tipo de Pago</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={paymentType === 'single' ? 'default' : 'outline'}
+                  onClick={() => {
+                    setPaymentType('single');
+                    const plan = plans.find(p => p.id === selectedPlanId);
+                    if (plan) setPaymentAmount(plan.price.toString());
+                  }}
+                  className="w-full"
+                >
+                  Pago Único
+                </Button>
+                <Button
+                  type="button"
+                  variant={paymentType === 'installments' ? 'default' : 'outline'}
+                  onClick={() => {
+                    setPaymentType('installments');
+                    setPaymentAmount('0');
+                  }}
+                  className="w-full"
+                >
+                  Cuotas / Plan de Pago
+                </Button>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Método de Pago</Label>
               <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as any)}>
@@ -922,18 +985,68 @@ export function ClientDetail() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="amount">Monto Pagado</Label>
-              <Input
-                id="amount"
-                type="number"
-                step="0.01"
-                value={paymentAmount}
-                onChange={(e) => setPaymentAmount(e.target.value)}
-                placeholder="0.00"
-                required
-              />
-            </div>
+
+            {paymentType === 'single' ? (
+              <div className="space-y-2">
+                <Label htmlFor="amount">Monto Pagado (Q)</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  step="0.01"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  placeholder="0.00"
+                  required
+                />
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>Número de Cuotas</Label>
+                  <Select value={numInstallments} onValueChange={setNumInstallments}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[2, 3, 4, 6, 9, 12].map(n => (
+                        <SelectItem key={n} value={n.toString()}>{n} cuotas</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="initial-payment">Enganche / Pago Inicial (Opcional)</Label>
+                  <Input
+                    id="initial-payment"
+                    type="number"
+                    step="0.01"
+                    value={initialPayment}
+                    onChange={(e) => setInitialPayment(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+                {/* Installment Preview */}
+                {selectedPlanId && (() => {
+                  const plan = plans.find(p => p.id === selectedPlanId);
+                  if (!plan) return null;
+                  const enganche = parseFloat(initialPayment) || 0;
+                  const remaining = plan.price - enganche;
+                  const cuotaMonto = remaining / parseInt(numInstallments);
+                  return (
+                    <div className="rounded-lg border bg-muted/50 p-3 space-y-1">
+                      <p className="text-sm font-semibold">Vista Previa del Plan</p>
+                      <div className="text-xs space-y-0.5">
+                        <p>Total: <span className="font-bold">{formatCurrency(plan.price)}</span></p>
+                        {enganche > 0 && <p>Enganche: <span className="font-bold text-green-600">{formatCurrency(enganche)}</span></p>}
+                        <p>Saldo a fraccionar: <span className="font-bold">{formatCurrency(Math.max(0, remaining))}</span></p>
+                        <p>{numInstallments} cuotas de: <span className="font-bold text-blue-600">{formatCurrency(Math.max(0, cuotaMonto))}</span></p>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="reference">Referencia (Opcional)</Label>
               <Input
@@ -947,8 +1060,8 @@ export function ClientDetail() {
               <Button type="button" variant="outline" onClick={() => setIsMembershipDialogOpen(false)} className="flex-1">
                 Cancelar
               </Button>
-              <Button type="submit" className="flex-1">
-                Asignar y Pagar
+              <Button type="submit" disabled={isAssigning} className="flex-1">
+                {isAssigning ? 'Procesando...' : paymentType === 'single' ? 'Asignar y Pagar' : `Asignar con ${numInstallments} Cuotas`}
               </Button>
             </div>
           </form>

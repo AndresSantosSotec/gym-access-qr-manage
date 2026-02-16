@@ -1,5 +1,16 @@
 import { storage, STORAGE_KEYS } from '@/utils/storage';
-import type { MembershipPlan, BlogPost, SiteConfig } from '@/types/models';
+import type { MembershipPlan, BlogPost, SiteConfig, Role } from '@/types/models';
+
+// Función para limpiar datos (útil para desarrollo)
+export const clearAllData = (): void => {
+  localStorage.clear();
+  console.log('✅ Datos limpiados. Recarga la página para reinicializar.');
+};
+
+// Hacer disponible globalmente para pruebas en consola
+if (typeof window !== 'undefined') {
+  (window as any).clearGymFlowData = clearAllData;
+}
 
 export const initializeSeedData = (): void => {
   const seedInitialized = storage.get<boolean>(STORAGE_KEYS.SEED_INITIALIZED);
@@ -7,6 +18,43 @@ export const initializeSeedData = (): void => {
   if (seedInitialized) return;
 
   const now = new Date().toISOString();
+
+  // Inicializar roles
+  const mockRoles: Role[] = [
+    {
+      id: 'role-admin',
+      name: 'Admin',
+      description: 'Administrador con acceso completo al sistema',
+      permissions: [
+        'DASHBOARD_VIEW',
+        'CLIENTS_VIEW', 'CLIENTS_CREATE', 'CLIENTS_EDIT', 'CLIENTS_DELETE',
+        'PLANS_VIEW', 'PLANS_MANAGE',
+        'MEMBERSHIPS_VIEW', 'MEMBERSHIPS_MANAGE',
+        'PAYMENTS_VIEW', 'PAYMENTS_MANAGE',
+        'CASH_VIEW', 'CASH_MANAGE',
+        'INVENTORY_VIEW', 'INVENTORY_MANAGE',
+        'ACCESS_VIEW', 'ACCESS_MANAGE',
+        'SETTINGS_VIEW', 'SETTINGS_MANAGE',
+        'ROLES_VIEW', 'ROLES_MANAGE',
+        'USERS_VIEW', 'USERS_MANAGE',
+      ],
+      createdAt: now,
+    },
+    {
+      id: 'role-staff',
+      name: 'Staff',
+      description: 'Personal del gimnasio con acceso limitado',
+      permissions: [
+        'DASHBOARD_VIEW',
+        'CLIENTS_VIEW', 'CLIENTS_CREATE', 'CLIENTS_EDIT',
+        'PLANS_VIEW',
+        'MEMBERSHIPS_VIEW', 'MEMBERSHIPS_MANAGE',
+        'PAYMENTS_VIEW',
+        'ACCESS_VIEW',
+      ],
+      createdAt: now,
+    },
+  ];
 
   const mockPlans: MembershipPlan[] = [
     {
@@ -143,6 +191,7 @@ Recuerda: los resultados se hacen en la cocina y se esculpen en el gimnasio.`,
     updatedAt: now,
   };
 
+  storage.set('gymflow_roles', mockRoles);
   storage.set(STORAGE_KEYS.MEMBERSHIP_PLANS, mockPlans);
   storage.set(STORAGE_KEYS.BLOG_POSTS, mockPosts);
   storage.set(STORAGE_KEYS.SITE_CONFIG, siteConfig);

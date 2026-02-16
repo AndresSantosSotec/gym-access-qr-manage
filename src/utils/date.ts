@@ -1,5 +1,8 @@
-export const formatDate = (date: string | Date): string => {
+export const formatDate = (date: string | Date | undefined | null): string => {
+  if (!date) return 'N/A';
   const d = new Date(date);
+  if (isNaN(d.getTime())) return 'Fecha inválida';
+
   return d.toLocaleDateString('es-ES', {
     year: 'numeric',
     month: 'long',

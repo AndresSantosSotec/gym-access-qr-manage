@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,14 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { DataTable, ColumnDef } from '@/components/DataTable';
 import {
   Select,
   SelectContent,
@@ -34,7 +27,7 @@ import { membershipsService } from '@/services/memberships.service';
 import { formatDate } from '@/utils/date';
 import { UserPlus, Phone, Envelope, CreditCard, ArrowRight } from '@phosphor-icons/react';
 import { toast } from 'sonner';
-import type { Lead } from '@/types/models';
+import type { Lead, MembershipPlan } from '@/types/models';
 
 export function Leads() {
   const navigate = useNavigate();
@@ -43,8 +36,8 @@ export function Leads() {
   const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
   const [filter, setFilter] = useState<Lead['status'] | 'all'>('all');
 
-  const filteredLeads = filter === 'all' 
-    ? leads 
+  const filteredLeads = filter === 'all'
+    ? leads
     : leads.filter(l => l.status === filter);
 
   const handleUpdateStatus = (leadId: string, status: Lead['status']) => {
@@ -79,13 +72,106 @@ export function Leads() {
     };
 
     return (
-      <Badge variant={variants[status]}>
-        {labels[status]}
+      <Badge variant={variants[status as keyof typeof variants]}>
+        {labels[status as keyof typeof labels]}
       </Badge>
     );
   };
 
-  const plans = membershipsService.getPlans();
+  const columns: ColumnDef<Lead>[] = [
+    {
+      header: 'Nombre',
+      accessorKey: 'name',
+      className: 'font-medium'
+    },
+    {
+      header: 'Contacto',
+      cell: (lead) => (
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-sm">
+            <Phone size={14} />
+            {lead.phone}
+          </div>
+          {lead.email && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Envelope size={14} />
+              {lead.email}
+            </div>
+          )}
+        </div>
+      )
+    },
+    {
+      header: 'Plan Interesado',
+      cell: (lead) => (
+        <code className="text-xs bg-muted px-2 py-1 rounded">
+          {lead.planSlug}
+        </code>
+      )
+    },
+    {
+      header: 'Método Preferido',
+      cell: (lead) => (
+        <div className="flex items-center gap-2">
+          <CreditCard size={16} />
+          {lead.preferredPaymentMethod === 'cash' ? 'Efectivo' : 'Tarjeta'}
+        </div>
+      )
+    },
+    {
+      header: 'Estado',
+      cell: (lead) => getStatusBadge(lead.status)
+    },
+    {
+      header: 'Fecha',
+      cell: (lead) => formatDate(lead.createdAt)
+    },
+    {
+      header: 'Acciones',
+      headerClassName: 'text-right',
+      className: 'text-right',
+      cell: (lead) => (
+        <div className="flex items-center justify-end gap-2">
+          {lead.status === 'NEW' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleUpdateStatus(lead.id, 'CONTACTED')}
+            >
+              Marcar Contactado
+            </Button>
+          )}
+          {lead.status !== 'CONVERTED' && (
+            <Button
+              size="sm"
+              onClick={() => {
+                setSelectedLead(lead);
+                setIsConvertDialogOpen(true);
+              }}
+              className="gap-2"
+            >
+              <UserPlus size={16} />
+              Convertir
+            </Button>
+          )}
+        </div>
+      )
+    }
+  ];
+
+  const [plans, setPlans] = useState<MembershipPlan[]>([]);
+
+  useEffect(() => {
+    const loadPlans = async () => {
+      try {
+        const data = await membershipsService.getPlans();
+        setPlans(data);
+      } catch (error) {
+        console.error('Error al cargar planes:', error);
+      }
+    };
+    loadPlans();
+  }, []);
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
@@ -152,87 +238,11 @@ export function Leads() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nombre</TableHead>
-                <TableHead>Contacto</TableHead>
-                <TableHead>Plan Interesado</TableHead>
-                <TableHead>Método Preferido</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Fecha</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredLeads.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    No hay leads para mostrar
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredLeads.map((lead) => (
-                  <TableRow key={lead.id}>
-                    <TableCell className="font-medium">{lead.name}</TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-sm">
-                          <Phone size={14} />
-                          {lead.phone}
-                        </div>
-                        {lead.email && (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Envelope size={14} />
-                            {lead.email}
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <code className="text-xs bg-muted px-2 py-1 rounded">
-                        {lead.planSlug}
-                      </code>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <CreditCard size={16} />
-                        {lead.preferredPaymentMethod === 'cash' ? 'Efectivo' : 'Tarjeta'}
-                      </div>
-                    </TableCell>
-                    <TableCell>{getStatusBadge(lead.status)}</TableCell>
-                    <TableCell>{formatDate(lead.createdAt)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {lead.status === 'NEW' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleUpdateStatus(lead.id, 'CONTACTED')}
-                          >
-                            Marcar Contactado
-                          </Button>
-                        )}
-                        {lead.status !== 'CONVERTED' && (
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              setSelectedLead(lead);
-                              setIsConvertDialogOpen(true);
-                            }}
-                            className="gap-2"
-                          >
-                            <UserPlus size={16} />
-                            Convertir
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+          <DataTable
+            data={filteredLeads}
+            columns={columns}
+            emptyMessage="No hay leads para mostrar"
+          />
         </CardContent>
       </Card>
 

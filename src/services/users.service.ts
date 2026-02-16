@@ -1,59 +1,54 @@
-import { storage } from '@/utils/storage';
-import type { User } from '@/types/models';
+import api from './api.service';
+import type { User, CreateUserData, UpdateUserData } from '@/types/models';
 
-const USERS_KEY = 'gymflow_users';
+// Helper to map backend snake_case to frontend camelCase
+const mapUser = (backendUser: any): User => ({
+  ...backendUser,
+  id: String(backendUser.id),
+  roleId: backendUser.role_id ? String(backendUser.role_id) : undefined,
+  birthDate: backendUser.birth_date,
+  hireDate: backendUser.hire_date,
+  cvUrl: backendUser.cv_url,
+  emergencyContact: {
+    name: backendUser.emergency_contact_name || '',
+    phone: backendUser.emergency_contact_phone || '',
+    relationship: backendUser.emergency_contact_relationship || '',
+  },
+  fingerprintId: backendUser.fingerprint_id,
+  fingerprintRegisteredAt: backendUser.fingerprint_registered_at,
+  photos: (backendUser.photos || []).map((p: any) => typeof p === 'string' ? p : p.url),
+  documents: (backendUser.documents || []).map((d: any) => ({
+    name: d.name,
+    url: d.url,
+    type: d.type,
+    category: d.category
+  })),
+  createdAt: backendUser.created_at,
+  updatedAt: backendUser.updated_at,
+});
 
 export const usersService = {
-  getAllUsers: (): User[] => {
-    return storage.get<User[]>(USERS_KEY) || [];
+  getAllUsers: async (): Promise<User[]> => {
+    const response = await api.get<any[]>('/users');
+    return response.data.map(mapUser);
   },
 
-  getUserById: (id: string): User | undefined => {
-    const users = usersService.getAllUsers();
-    return users.find(u => u.id === id);
+  getUserById: async (id: string): Promise<User> => {
+    const response = await api.get<any>(`/users/${id}`);
+    return mapUser(response.data);
   },
 
-  getUserByUsername: (username: string): User | undefined => {
-    const users = usersService.getAllUsers();
-    return users.find(u => u.username === username);
+  createUser: async (data: CreateUserData): Promise<User> => {
+    const response = await api.post<any>('/users', data);
+    return mapUser(response.data);
   },
 
-  createUser: (data: Omit<User, 'id' | 'createdAt'>): User => {
-    const users = usersService.getAllUsers();
-    
-    const newUser: User = {
-      ...data,
-      id: `user-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-    };
-
-    const updated = [...users, newUser];
-    storage.set(USERS_KEY, updated);
-    
-    return newUser;
+  updateUser: async (id: string, data: UpdateUserData): Promise<User> => {
+    const response = await api.put<any>(`/users/${id}`, data);
+    return mapUser(response.data);
   },
 
-  updateUser: (id: string, data: Partial<Omit<User, 'id' | 'createdAt'>>): User | null => {
-    const users = usersService.getAllUsers();
-    const index = users.findIndex(u => u.id === id);
-    
-    if (index === -1) return null;
-
-    const updated = users.map(u => 
-      u.id === id ? { ...u, ...data } : u
-    );
-    
-    storage.set(USERS_KEY, updated);
-    return updated[index];
-  },
-
-  deleteUser: (id: string): boolean => {
-    const users = usersService.getAllUsers();
-    const filtered = users.filter(u => u.id !== id);
-    
-    if (filtered.length === users.length) return false;
-    
-    storage.set(USERS_KEY, filtered);
-    return true;
+  deleteUser: async (id: string): Promise<void> => {
+    await api.delete(`/users/${id}`);
   },
 };

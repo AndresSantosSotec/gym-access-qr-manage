@@ -1,59 +1,42 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { ClientCreateWizardModal } from '@/components/ClientCreateWizardModal';
+import { DataTable, ColumnDef } from '@/components/DataTable';
 import { clientsService } from '@/services/clients.service';
+import { membershipsService } from '@/services/memberships.service';
 import { formatShortDate, getDaysRemaining } from '@/utils/date';
-import { toast } from 'sonner';
 import { MagnifyingGlass, UserPlus, Eye, UsersThree } from '@phosphor-icons/react';
-import type { Client } from '@/types/models';
+import type { Client, MembershipPlan } from '@/types/models';
 
 export function ClientsList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [clients, setClients] = useState(() => clientsService.getAll());
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newClient, setNewClient] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    dpi: '',
-    notes: '',
-  });
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [plans, setPlans] = useState<MembershipPlan[]>([]);
+
+  useEffect(() => {
+    const loadPlans = async () => {
+      try {
+        const data = await membershipsService.getPlans();
+        setPlans(data);
+      } catch (error) {
+        console.error('Error al cargar planes:', error);
+      }
+    };
+    loadPlans();
+  }, []);
 
   const filteredClients = useMemo(() => {
     if (!searchQuery) return clients;
     return clientsService.search(searchQuery);
   }, [searchQuery, clients]);
 
-  const handleCreateClient = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!newClient.name || !newClient.phone) {
-      toast.error('Nombre y teléfono son requeridos');
-      return;
-    }
-
-    const client = clientsService.create({
-      ...newClient,
-      status: 'INACTIVE',
-    });
-
+  const handleWizardSuccess = () => {
     setClients(clientsService.getAll());
-    setIsDialogOpen(false);
-    setNewClient({ name: '', phone: '', email: '', dpi: '', notes: '' });
-    toast.success(`Cliente ${client.name} creado exitosamente`);
   };
 
   const getStatusBadge = (client: Client) => {
@@ -82,6 +65,60 @@ export function ClientsList() {
       .slice(0, 2);
   };
 
+  const columns: ColumnDef<Client>[] = [
+    {
+      header: 'Foto',
+      cell: (client) => (
+        client.profilePhoto ? (
+          <img
+            src={client.profilePhoto}
+            alt={client.name}
+            className="w-10 h-10 rounded-full object-cover ring-2 ring-border"
+          />
+        ) : (
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-sm font-bold text-primary">
+            {getInitials(client.name)}
+          </div>
+        )
+      )
+    },
+    {
+      header: 'Nombre',
+      accessorKey: 'name',
+      className: 'font-medium'
+    },
+    {
+      header: 'Teléfono',
+      accessorKey: 'phone',
+      className: 'text-muted-foreground'
+    },
+    {
+      header: 'Estado',
+      cell: (client) => getStatusBadge(client)
+    },
+    {
+      header: 'Fecha Fin',
+      cell: (client) => (
+        <span className="text-muted-foreground">
+          {client.membershipEnd ? formatShortDate(client.membershipEnd) : 'Sin membresía'}
+        </span>
+      )
+    },
+    {
+      header: 'Acción',
+      headerClassName: 'text-right',
+      className: 'text-right',
+      cell: (client) => (
+        <Link to={`/admin/clients/${client.id}`}>
+          <Button variant="ghost" size="sm">
+            <Eye className="mr-2" size={16} />
+            Ver
+          </Button>
+        </Link>
+      )
+    }
+  ];
+
   return (
     <div className="p-6 lg:p-8 space-y-6">
       <div className="flex items-center justify-between">
@@ -92,87 +129,10 @@ export function ClientsList() {
           </p>
         </div>
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button size="lg">
-              <UserPlus className="mr-2" size={20} weight="bold" />
-              Nuevo Cliente
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Nuevo Cliente</DialogTitle>
-              <DialogDescription>
-                Ingresa los datos del nuevo miembro
-              </DialogDescription>
-            </DialogHeader>
-
-            <form onSubmit={handleCreateClient} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nombre Completo *</Label>
-                <Input
-                  id="name"
-                  value={newClient.name}
-                  onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
-                  placeholder="Juan Pérez"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">Teléfono *</Label>
-                <Input
-                  id="phone"
-                  value={newClient.phone}
-                  onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })}
-                  placeholder="+502 5555-1234"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={newClient.email}
-                  onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
-                  placeholder="cliente@email.com"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="dpi">DPI</Label>
-                <Input
-                  id="dpi"
-                  value={newClient.dpi}
-                  onChange={(e) => setNewClient({ ...newClient, dpi: e.target.value })}
-                  placeholder="1234 56789 0101"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="notes">Notas</Label>
-                <Textarea
-                  id="notes"
-                  value={newClient.notes}
-                  onChange={(e) => setNewClient({ ...newClient, notes: e.target.value })}
-                  placeholder="Información adicional..."
-                  rows={3}
-                />
-              </div>
-
-              <div className="flex gap-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="flex-1">
-                  Cancelar
-                </Button>
-                <Button type="submit" className="flex-1">
-                  Crear Cliente
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <Button size="lg" onClick={() => setIsWizardOpen(true)}>
+          <UserPlus className="mr-2" size={20} weight="bold" />
+          Nuevo Cliente
+        </Button>
       </div>
 
       <Card>
@@ -190,65 +150,20 @@ export function ClientsList() {
           </div>
         </CardHeader>
         <CardContent>
-          {filteredClients.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <UsersThree className="mx-auto mb-4 text-muted-foreground/50" size={48} />
-              <p className="font-semibold">No se encontraron clientes</p>
-              <p className="text-sm mt-2">
-                {searchQuery ? 'Intenta con otro término de búsqueda' : 'Crea tu primer cliente para comenzar'}
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-3 px-4 font-semibold text-sm">Foto</th>
-                    <th className="text-left py-3 px-4 font-semibold text-sm">Nombre</th>
-                    <th className="text-left py-3 px-4 font-semibold text-sm">Teléfono</th>
-                    <th className="text-left py-3 px-4 font-semibold text-sm">Estado</th>
-                    <th className="text-left py-3 px-4 font-semibold text-sm">Fecha Fin</th>
-                    <th className="text-right py-3 px-4 font-semibold text-sm">Acción</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredClients.map((client) => (
-                    <tr key={client.id} className="border-b border-border hover:bg-accent/50 transition-colors">
-                      <td className="py-4 px-4">
-                        {client.profilePhoto ? (
-                          <img
-                            src={client.profilePhoto}
-                            alt={client.name}
-                            className="w-10 h-10 rounded-full object-cover ring-2 ring-border"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-sm font-bold text-primary">
-                            {getInitials(client.name)}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-4 px-4 font-medium">{client.name}</td>
-                      <td className="py-4 px-4 text-muted-foreground">{client.phone}</td>
-                      <td className="py-4 px-4">{getStatusBadge(client)}</td>
-                      <td className="py-4 px-4 text-muted-foreground">
-                        {client.membershipEnd ? formatShortDate(client.membershipEnd) : 'Sin membresía'}
-                      </td>
-                      <td className="py-4 px-4 text-right">
-                        <Link to={`/admin/clients/${client.id}`}>
-                          <Button variant="ghost" size="sm">
-                            <Eye className="mr-2" size={16} />
-                            Ver
-                          </Button>
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <DataTable
+            data={filteredClients}
+            columns={columns}
+            emptyMessage={searchQuery ? 'No se encontraron clientes para tu búsqueda' : 'No hay clientes registrados'}
+          />
         </CardContent>
       </Card>
+
+      <ClientCreateWizardModal
+        open={isWizardOpen}
+        onClose={() => setIsWizardOpen(false)}
+        onSuccess={handleWizardSuccess}
+        plans={plans}
+      />
     </div>
   );
 }
