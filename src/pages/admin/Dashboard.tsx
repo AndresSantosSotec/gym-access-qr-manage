@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,34 +13,45 @@ import {
   CheckCircle,
   XCircle,
 } from '@phosphor-icons/react';
-import { authService } from '@/services/auth.service';
+import { useAuth } from '@/hooks/useAuth';
 import { can } from '@/services/permissions';
 import type { PermissionKey } from '@/types/models';
 
 export function Dashboard() {
-  const auth = authService.getCurrentUser();
+  const { auth } = useAuth();
   const userName = auth?.user?.name || 'Usuario';
 
-  const clients = useMemo(() => clientsService.getAll(), []);
-  const payments = useMemo(() => membershipsService.getAllPayments(), []);
-  const recentLogs = useMemo(() => accessService.getRecentLogs(10), []);
+  const [clients, setClients] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [recentLogs, setRecentLogs] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const activeClients = clients.filter((c) => c.status === 'ACTIVE').length;
-  const inactiveClients = clients.filter((c) => c.status === 'INACTIVE' || c.status === 'SUSPENDED').length;
+  // Fetch data
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [clientsData, paymentsData, logsData] = await Promise.all([
+          clientsService.getAll(),
+          membershipsService.getAllPayments(),
+          accessService.getRecentLogs(10)
+        ]);
+        setClients(clientsData || []);
+        setPayments(paymentsData || []);
+        setRecentLogs(logsData || []);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
-  const currentMonth = new Date().getMonth();
-  const currentYear = new Date().getFullYear();
-  const monthlyRevenue = payments
-    .filter((p) => {
-      const paymentDate = new Date(p.createdAt);
-      return paymentDate.getMonth() === currentMonth && paymentDate.getFullYear() === currentYear;
-    })
-    .reduce((sum, p) => sum + p.amount, 0);
-
-  const metrics = [
+  // Define the raw metrics config
+  const rawMetrics = useMemo(() => [
     {
       title: 'Miembros Activos',
-      value: activeClients,
+      value: (clients || []).filter((c) => c.status === 'ACTIVE').length,
       icon: Users,
       color: 'text-green-600',
       bgColor: 'bg-green-50',
@@ -48,7 +59,7 @@ export function Dashboard() {
     },
     {
       title: 'Miembros Inactivos',
-      value: inactiveClients,
+      value: (clients || []).filter((c) => c.status === 'INACTIVE' || c.status === 'SUSPENDED').length,
       icon: UserMinus,
       color: 'text-red-600',
       bgColor: 'bg-red-50',
@@ -56,13 +67,39 @@ export function Dashboard() {
     },
     {
       title: 'Ingresos del Mes',
-      value: formatCurrency(monthlyRevenue),
+      value: formatCurrency(
+        Array.isArray(payments) ? payments
+          .filter((p) => {
+            try {
+              const paymentDate = new Date(p.createdAt);
+              const currentMonth = new Date().getMonth();
+              const currentYear = new Date().getFullYear();
+              return paymentDate.getMonth() === currentMonth && paymentDate.getFullYear() === currentYear;
+            } catch (e) { return false; }
+          })
+          .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+          : 0
+      ),
       icon: CurrencyDollar,
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
       permission: 'PAYMENTS_VIEW' as PermissionKey,
     },
-  ].filter(m => !m.permission || can(m.permission));
+  ], [clients, payments]);
+
+  const [visibleMetrics, setVisibleMetrics] = useState<any[]>([]);
+
+  // Filter metrics based on permissions
+  useEffect(() => {
+    const filterMetrics = async () => {
+      const filtered = await Promise.all(rawMetrics.map(async (m) => {
+        if (!m.permission) return m;
+        return (await can(m.permission)) ? m : null;
+      }));
+      setVisibleMetrics(filtered.filter(Boolean));
+    };
+    filterMetrics();
+  }, [rawMetrics]);
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
@@ -75,25 +112,23 @@ export function Dashboard() {
         </p>
       </div>
 
-      {metrics.length > 0 && (
-        <div className="grid gap-6 md:grid-cols-3">
-          {metrics.map((metric) => (
-            <Card key={metric.title} className="hover:shadow-md transition-shadow border-primary/10">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                  {metric.title}
-                </CardTitle>
-                <div className={`p-2 rounded-lg ${metric.bgColor}`}>
-                  <metric.icon className={metric.color} size={20} weight="bold" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{metric.value}</div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      <div className="grid gap-6 md:grid-cols-3">
+        {visibleMetrics.map((metric) => (
+          <Card key={metric.title} className="hover:shadow-md transition-shadow border-primary/10">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                {metric.title}
+              </CardTitle>
+              <div className={`p-2 rounded-lg ${metric.bgColor}`}>
+                <metric.icon className={metric.color} size={20} weight="bold" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{metric.value}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
       <Card>
         <CardHeader>

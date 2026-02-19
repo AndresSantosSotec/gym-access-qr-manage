@@ -4,7 +4,7 @@ import type { Client } from '@/types/models';
 // Helper transform function
 const mapClientFromBackend = (data: any): Client => {
   // Construct full photo URL if exists
-  let profilePhoto = undefined;
+  let profilePhoto: string | undefined = undefined;
   if (data.photo_url) {
     if (data.photo_url.startsWith('http')) {
       profilePhoto = data.photo_url;
@@ -114,6 +114,21 @@ export const clientsService = {
     } catch (error) {
       console.error('Error deleting client:', error);
       return false;
+    }
+  },
+
+  getFingerprintClients: async (): Promise<Partial<Client>[]> => {
+    try {
+      const response = await api.get('/public/fingerprint-clients');
+      return response.data.map((c: any) => ({
+        id: c.id,
+        name: `${c.first_name || ''} ${c.last_name || ''}`.trim(),
+        fingerprintId: c.fingerprint_id,
+        profilePhoto: c.photo_url
+      }));
+    } catch (error) {
+      console.error('Error fetching fingerprint clients', error);
+      return [];
     }
   },
 

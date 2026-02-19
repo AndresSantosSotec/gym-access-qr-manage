@@ -3,6 +3,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Button } from '@/components/ui/button';
 import { Fingerprint, CheckCircle, XCircle, Spinner } from '@phosphor-icons/react';
 import { Progress } from '@/components/ui/progress';
+import { api } from '@/services/api.service';
+import { toast } from 'sonner';
 
 interface FingerprintCaptureModalProps {
     open: boolean;
@@ -19,36 +21,69 @@ export function FingerprintCaptureModal({
 }: FingerprintCaptureModalProps) {
     const [step, setStep] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
     const [progress, setProgress] = useState(0);
+    const [scannedData, setScannedData] = useState<string | null>(null);
 
     useEffect(() => {
         if (open) {
             setStep('idle');
             setProgress(0);
+            setScannedData(null);
         }
     }, [open]);
 
-    const startScan = () => {
+    const startScan = async () => {
         setStep('scanning');
         setProgress(0);
 
-        // Simulate scanning process
+        // Intento 1: Conectar con el servicio real del backend
+        try {
+            // Animación de progreso falsa inicial
+            const interval = setInterval(() => {
+                setProgress(p => (p < 90 ? p + 5 : p));
+            }, 100);
+
+            const response = await api.post('/fingerprint/capture');
+
+            clearInterval(interval);
+            setProgress(100);
+
+            if (response.data.success && response.data.fingerprint_template) {
+                setScannedData(response.data.fingerprint_template);
+                setStep('success');
+                toast.success('Huella capturada del dispositivo');
+            } else {
+                throw new Error(response.data.error || 'Error al capturar');
+            }
+        } catch (error) {
+            console.error('Error capturando huella real:', error);
+            // Fallback: Simulación si falla la conexión real (para desarrollo)
+            // En producción, aquí mostraríamos un error claro
+            toast.error('No se detectó lector. Iniciando modo simulación/manual.');
+            runSimulation();
+        }
+    };
+
+    const runSimulation = () => {
+        setStep('scanning');
+        setProgress(0);
         const interval = setInterval(() => {
             setProgress((prev) => {
                 if (prev >= 100) {
                     clearInterval(interval);
+                    const mockBase64 = btoa(`FINGERPRINT_DATA_${clientName}_${Date.now()}_${Math.random()}`);
+                    setScannedData(mockBase64);
                     setStep('success');
                     return 100;
                 }
-                return prev + 2; // Increments to reach 100 in roughly 2.5s (50 steps * 50ms)
+                return prev + 5;
             });
         }, 50);
     };
 
     const handleConfirm = () => {
-        // Generar una cadena Base64 simulada pero única
-        // En un caso real, esto vendría del SDK del lector
-        const mockBase64 = btoa(`FINGERPRINT_DATA_${clientName}_${Date.now()}_${Math.random()}`);
-        onCapture(mockBase64);
+        if (scannedData) {
+            onCapture(scannedData);
+        }
     };
 
     return (

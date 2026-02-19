@@ -220,14 +220,27 @@ export const membershipsService = {
     return response.data;
   },
 
-  getPaymentsByClient: (clientId: string): Payment[] => {
-    const payments = storage.get<Payment[]>(STORAGE_KEYS.PAYMENTS) || [];
-    return payments.filter((p) => p.clientId === clientId).sort((a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+  getPaymentsByClient: async (clientId: string): Promise<Payment[]> => {
+    try {
+      const response = await api.get(`/payments/client/${clientId}`);
+      return response.data;
+    } catch (error) {
+      console.error(error);
+      return [];
+    }
   },
 
-  getAllPayments: (): Payment[] => {
-    return storage.get<Payment[]>(STORAGE_KEYS.PAYMENTS) || [];
+  getAllPayments: async (): Promise<Payment[]> => {
+    try {
+      const response = await api.get('/payments');
+      // Handle Laravel Pagination
+      if (response.data && Array.isArray(response.data.data)) {
+        return response.data.data;
+      }
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error('Error fetching payments:', error);
+      return [];
+    }
   },
 };

@@ -27,6 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { WebcamCaptureModal } from '@/components/WebcamCaptureModal';
+import { FingerprintCaptureModal } from '@/components/FingerprintCaptureModal';
 import { clientsService } from '@/services/clients.service';
 import { membershipsService } from '@/services/memberships.service';
 import { accessService } from '@/services/access.service';
@@ -94,8 +95,26 @@ export function ClientDetail() {
     status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
   });
 
-  const payments = client ? membershipsService.getPaymentsByClient(client.id) : [];
-  const accessLogs = client ? accessService.getLogsByClient(client.id) : [];
+  const [accessLogs, setAccessLogs] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (client) {
+      const loadRelatedData = async () => {
+        try {
+          const [logs, clientPayments] = await Promise.all([
+            accessService.getLogsByClient(client.id),
+            membershipsService.getPaymentsByClient(client.id)
+          ]);
+          setAccessLogs(logs);
+          setPayments(clientPayments);
+        } catch (e) {
+          console.error(e);
+        }
+      };
+      loadRelatedData();
+    }
+  }, [client]);
 
   // Cargar planes de membresía
   useEffect(() => {
@@ -111,25 +130,31 @@ export function ClientDetail() {
   }, []);
 
   useEffect(() => {
-    if (id) {
-      const foundClient = clientsService.getById(id);
-      if (!foundClient) {
-        toast.error('Cliente no encontrado');
-        navigate('/admin/clients');
-        return;
+    const fetchClient = async () => {
+      if (!id) return;
+      try {
+        const foundClient = await clientsService.getById(id);
+        if (!foundClient) {
+          toast.error('Cliente no encontrado');
+          navigate('/admin/clients');
+          return;
+        }
+        setClient(foundClient);
+        setPhotoPreview(foundClient.profilePhoto || null);
+        setEditForm({
+          name: foundClient.name,
+          phone: foundClient.phone,
+          email: foundClient.email || '',
+          dpi: foundClient.dpi || '',
+          notes: foundClient.notes || '',
+          status: foundClient.status,
+        });
+        loadEconomicProfile(foundClient.id);
+      } catch (error) {
+        console.error('Error loading client:', error);
       }
-      setClient(foundClient);
-      setPhotoPreview(foundClient.profilePhoto || null);
-      setEditForm({
-        name: foundClient.name,
-        phone: foundClient.phone,
-        email: foundClient.email || '',
-        dpi: foundClient.dpi || '',
-        notes: foundClient.notes || '',
-        status: foundClient.status,
-      });
-      loadEconomicProfile(foundClient.id);
-    }
+    };
+    fetchClient();
   }, [id, navigate]);
 
   const loadEconomicProfile = (clientId: string) => {
@@ -152,61 +177,90 @@ export function ClientDetail() {
     }
 
     const reader = new FileReader();
-    reader.onloadend = () => {
+    reader.onloadend = async () => {
       const base64 = reader.result as string;
       setPhotoPreview(base64);
       if (client) {
-        clientsService.update(client.id, { profilePhoto: base64 });
-        setClient({ ...client, profilePhoto: base64 });
-        toast.success('Foto actualizada');
+        try {
+          await clientsService.update(client.id, { profilePhoto: base64 });
+          setClient({ ...client, profilePhoto: base64 });
+          toast.success('Foto actualizada');
+        } catch (error) {
+          console.error(error);
+          toast.error('Error al actualizar la foto');
+        }
       }
     };
     reader.readAsDataURL(file);
   };
 
-  const handleRemovePhoto = () => {
+  const handleRemovePhoto = async () => {
     if (!client) return;
-    clientsService.update(client.id, { profilePhoto: undefined });
-    setClient({ ...client, profilePhoto: undefined });
-    setPhotoPreview(null);
-    toast.success('Foto eliminada');
+    try {
+      await clientsService.update(client.id, { profilePhoto: undefined });
+      setClient({ ...client, profilePhoto: undefined });
+      setPhotoPreview(null);
+      toast.success('Foto eliminada');
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al eliminar la foto');
+    }
   };
 
-  const handleWebcamCapture = (base64Image: string) => {
+  const handleWebcamCapture = async (base64Image: string) => {
     if (!client) return;
     setPhotoPreview(base64Image);
-    clientsService.update(client.id, { profilePhoto: base64Image });
-    setClient({ ...client, profilePhoto: base64Image });
-    toast.success('Foto capturada y actualizada');
+    try {
+      await clientsService.update(client.id, { profilePhoto: base64Image });
+      setClient({ ...client, profilePhoto: base64Image });
+      toast.success('Foto capturada y actualizada');
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al guardar la foto capturada');
+    }
   };
 
-  const handleRegisterFingerprint = () => {
+  const handleRegisterFingerprint = async (base64: string) => {
     if (!client) return;
-    const fingerprintId = `FP-${client.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const registeredAt = new Date().toISOString();
 
-    clientsService.update(client.id, {
-      fingerprintId,
-      fingerprintRegisteredAt: registeredAt,
-    });
+    try {
+      const result = await clientsService.registerFingerprint(client.id, base64);
 
-    setClient({ ...client, fingerprintId, fingerprintRegisteredAt: registeredAt });
-    setIsFingerprintDialogOpen(false);
-    toast.success('Huella digital registrada (demo)');
+      const fingerprintId = result.fingerprint_id || `FP-${client.id}-${Date.now()}`;
+      const registeredAt = result.registered_at || new Date().toISOString();
+
+      setClient({ ...client, fingerprintId, fingerprintRegisteredAt: registeredAt });
+      setIsFingerprintDialogOpen(false);
+      toast.success('Huella digital registrada exitosamente');
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al registrar la huella digital');
+    }
   };
 
-  const handleRemoveFingerprint = () => {
+  const handleRemoveFingerprint = async () => {
     if (!client) return;
-    clientsService.update(client.id, {
-      fingerprintId: undefined,
-      fingerprintRegisteredAt: undefined,
-    });
-    setClient({ ...client, fingerprintId: undefined, fingerprintRegisteredAt: undefined });
-    setIsRemoveFingerprintOpen(false);
-    toast.success('Huella eliminada');
+    try {
+      // Use the specific removeFingerprint method if available, fallback to update
+      if (clientsService.removeFingerprint) {
+        await clientsService.removeFingerprint(client.id);
+      } else {
+        await clientsService.update(client.id, {
+          fingerprintId: undefined,
+          fingerprintRegisteredAt: undefined,
+        });
+      }
+
+      setClient({ ...client, fingerprintId: undefined, fingerprintRegisteredAt: undefined });
+      setIsRemoveFingerprintOpen(false);
+      toast.success('Huella eliminada');
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al eliminar la huella');
+    }
   };
 
-  const handleUpdateClient = (e: React.FormEvent) => {
+  const handleUpdateClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!client) return;
 
@@ -215,11 +269,16 @@ export function ClientDetail() {
       return;
     }
 
-    const updated = clientsService.update(client.id, editForm);
-    if (updated) {
-      setClient(updated);
-      setIsEditDialogOpen(false);
-      toast.success('Cliente actualizado');
+    try {
+      const updated = await clientsService.update(client.id, editForm);
+      if (updated) {
+        setClient(updated);
+        setIsEditDialogOpen(false);
+        toast.success('Cliente actualizado');
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al actualizar cliente');
     }
   };
 
@@ -257,7 +316,7 @@ export function ClientDetail() {
         paymentType === 'installments' && initialPayment ? parseFloat(initialPayment) : undefined,
       );
 
-      const updatedClient = clientsService.getById(client.id);
+      const updatedClient = await clientsService.getById(client.id);
       setClient(updatedClient);
       setIsMembershipDialogOpen(false);
       setSelectedPlanId('');
@@ -1068,29 +1127,12 @@ export function ClientDetail() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isFingerprintDialogOpen} onOpenChange={setIsFingerprintDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Registrar Huella Digital (Demo)</DialogTitle>
-            <DialogDescription>
-              Simulación de registro biométrico. En producción se conectaría con un lector de huellas real.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-8 text-center">
-            <Fingerprint className="mx-auto mb-4 text-primary animate-pulse" size={96} weight="duotone" />
-            <p className="text-lg font-semibold">Coloca el dedo en el lector</p>
-            <p className="text-sm text-muted-foreground mt-2">(Modo demostración)</p>
-          </div>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsFingerprintDialogOpen(false)} className="flex-1">
-              Cancelar
-            </Button>
-            <Button onClick={handleRegisterFingerprint} className="flex-1">
-              Registrar
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <FingerprintCaptureModal
+        open={isFingerprintDialogOpen}
+        onClose={() => setIsFingerprintDialogOpen(false)}
+        onCapture={handleRegisterFingerprint}
+        clientName={client.name}
+      />
 
       <AlertDialog open={isRemoveFingerprintOpen} onOpenChange={setIsRemoveFingerprintOpen}>
         <AlertDialogContent>

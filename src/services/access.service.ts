@@ -1,102 +1,66 @@
-import { storage, STORAGE_KEYS } from '@/utils/storage';
+import { api } from './api.service';
 import type { AccessLog, Client } from '@/types/models';
-import { clientsService } from './clients.service';
-import { isExpired } from '@/utils/date';
+
+export interface VerifyAccessResponse {
+  allowed: boolean;
+  client: Client | null;
+  message: string;
+  log?: AccessLog;
+}
 
 export const accessService = {
-  verifyAccessByQR: (qrCode: string): { allowed: boolean; client: Client | null; message: string } => {
-    const clientId = qrCode.replace('QR-CLIENT-', '');
-    const client = clientsService.getById(clientId);
-
-    if (!client) {
+  verifyAccessByQR: async (qrCode: string): Promise<VerifyAccessResponse> => {
+    try {
+      const response = await api.post('/access/verify-qr', { qr_code: qrCode });
+      return {
+        allowed: response.data.allowed,
+        client: response.data.client,
+        message: response.data.message,
+        log: response.data.log
+      };
+    } catch (error: any) {
       return {
         allowed: false,
         client: null,
-        message: 'Código QR inválido',
+        message: error.response?.data?.message || 'Error al verificar acceso',
       };
     }
-
-    const allowed = !!(client.status === 'ACTIVE' && 
-                    client.membershipEnd && 
-                    !isExpired(client.membershipEnd));
-
-    const log: AccessLog = {
-      id: `LOG-${Date.now()}`,
-      clientId: client.id,
-      clientName: client.name,
-      createdAt: new Date().toISOString(),
-      method: 'QR',
-      result: allowed ? 'ALLOWED' : 'DENIED',
-    };
-
-    const logs = storage.get<AccessLog[]>(STORAGE_KEYS.ACCESS_LOGS) || [];
-    storage.set(STORAGE_KEYS.ACCESS_LOGS, [...logs, log]);
-
-    return {
-      allowed,
-      client,
-      message: allowed 
-        ? '¡Acceso permitido! Bienvenido/a' 
-        : 'Acceso denegado - Membresía vencida',
-    };
   },
 
-  verifyAccessByFingerprint: (fingerprintId: string): { allowed: boolean; client: Client | null; message: string } => {
-    const clients = clientsService.getAll();
-    const client = clients.find((c) => c.fingerprintId === fingerprintId);
-
-    if (!client) {
+  verifyAccessByFingerprint: async (fingerprintId: string): Promise<VerifyAccessResponse> => {
+    try {
+      const response = await api.post('/access/verify-fingerprint', { fingerprint_id: fingerprintId });
+      return {
+        allowed: response.data.allowed,
+        client: response.data.client,
+        message: response.data.message,
+        log: response.data.log
+      };
+    } catch (error: any) {
       return {
         allowed: false,
         client: null,
-        message: 'Huella digital no registrada',
+        message: error.response?.data?.message || 'Error al verificar huella',
       };
     }
-
-    const allowed = !!(client.status === 'ACTIVE' && 
-                    client.membershipEnd && 
-                    !isExpired(client.membershipEnd));
-
-    const log: AccessLog = {
-      id: `LOG-${Date.now()}`,
-      clientId: client.id,
-      clientName: client.name,
-      createdAt: new Date().toISOString(),
-      method: 'FINGERPRINT',
-      result: allowed ? 'ALLOWED' : 'DENIED',
-    };
-
-    const logs = storage.get<AccessLog[]>(STORAGE_KEYS.ACCESS_LOGS) || [];
-    storage.set(STORAGE_KEYS.ACCESS_LOGS, [...logs, log]);
-
-    return {
-      allowed,
-      client,
-      message: allowed 
-        ? '¡Acceso permitido! Bienvenido/a' 
-        : 'Acceso denegado - Membresía vencida',
-    };
   },
 
-  verifyAccess: (qrCode: string): { allowed: boolean; client: Client | null; message: string } => {
+  verifyAccess: async (qrCode: string): Promise<VerifyAccessResponse> => {
     return accessService.verifyAccessByQR(qrCode);
   },
 
-  getRecentLogs: (limit: number = 10): AccessLog[] => {
-    const logs = storage.get<AccessLog[]>(STORAGE_KEYS.ACCESS_LOGS) || [];
-    return logs
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, limit);
+  getRecentLogs: async (limit: number = 10): Promise<AccessLog[]> => {
+    const response = await api.get(`/access/recent?limit=${limit}`);
+    return response.data;
   },
 
-  getLogsByClient: (clientId: string): AccessLog[] => {
-    const logs = storage.get<AccessLog[]>(STORAGE_KEYS.ACCESS_LOGS) || [];
-    return logs
-      .filter((log) => log.clientId === clientId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  getLogsByClient: async (clientId: string): Promise<AccessLog[]> => {
+    const response = await api.get(`/access/by-client/${clientId}`);
+    return response.data;
   },
 
-  getAllLogs: (): AccessLog[] => {
-    return storage.get<AccessLog[]>(STORAGE_KEYS.ACCESS_LOGS) || [];
+  getAllLogs: async (): Promise<AccessLog[]> => {
+    const response = await api.get('/access-logs');
+    return response.data;
   },
 };

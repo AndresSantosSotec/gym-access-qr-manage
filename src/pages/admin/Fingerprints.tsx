@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +10,11 @@ import { Eye, CheckCircle, XCircle } from '@phosphor-icons/react';
 import type { Client } from '@/types/models';
 
 export function Fingerprints() {
-  const clients = useMemo(() => clientsService.getAll(), []);
+  const [clients, setClients] = useState<Client[]>([]);
+
+  useEffect(() => {
+    clientsService.getAll().then(data => setClients(data));
+  }, []);
 
   const getInitials = (name: string) => {
     return name

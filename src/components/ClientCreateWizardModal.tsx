@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { WebcamCaptureModal } from './WebcamCaptureModal';
+import { FingerprintCaptureModal } from './FingerprintCaptureModal';
 import { clientsService } from '@/services/clients.service';
 import { membershipsService } from '@/services/memberships.service';
 import { paymentsService } from '@/services/payments.service';
@@ -40,7 +41,9 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
 
   const [profilePhoto, setProfilePhoto] = useState<string>('');
   const [isWebcamOpen, setIsWebcamOpen] = useState(false);
+  const [isFingerprintModalOpen, setIsFingerprintModalOpen] = useState(false);
   const [fingerprintId, setFingerprintId] = useState<string>('');
+  const [fingerprintBase64, setFingerprintBase64] = useState<string>('');
   const [fingerprintRegisteredAt, setFingerprintRegisteredAt] = useState<string>('');
 
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
@@ -152,11 +155,13 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
     setProfilePhoto('');
   };
 
-  const handleRegisterFingerprint = () => {
+  const handleRegisterFingerprint = (base64: string) => {
     const fpId = `FP-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     setFingerprintId(fpId);
+    setFingerprintBase64(base64);
     setFingerprintRegisteredAt(new Date().toISOString());
-    toast.success('Huella registrada (demo)');
+    setIsFingerprintModalOpen(false);
+    toast.success('Huella capturada temporalmente');
   };
 
   const handleRemoveFingerprint = () => {
@@ -174,7 +179,7 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
     setIsSubmitting(true);
 
     try {
-      const newClient = clientsService.create({
+      const newClient = await clientsService.create({
         name,
         phone,
         email,
@@ -182,9 +187,19 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
         notes,
         status: 'INACTIVE',
         profilePhoto,
-        fingerprintId,
-        fingerprintRegisteredAt,
+        // fingerprint info is sent separately or if backend supported it
+        // We will send it after creation
       });
+
+      if (fingerprintBase64) {
+        try {
+          await clientsService.registerFingerprint(newClient.id, fingerprintBase64);
+          toast.success('Huella registrada en el servidor');
+        } catch (fpError) {
+          console.error('Error registering fingerprint', fpError);
+          toast.error('Cliente creado pero falló el registro de huella');
+        }
+      }
 
       if (selectedPlanId && selectedPlan) {
         const method = finalPaymentMethod || paymentMethod;
@@ -447,17 +462,24 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={handleRegisterFingerprint}
+                        onClick={() => setIsFingerprintModalOpen(true)}
                         className="w-full"
                       >
                         <Fingerprint size={20} className="mr-2" />
-                        Registrar Huella (Demo)
+                        Capturar Huella
                       </Button>
                     )}
                   </TabsContent>
                 </Tabs>
               </div>
             )}
+
+            <FingerprintCaptureModal
+              open={isFingerprintModalOpen}
+              onClose={() => setIsFingerprintModalOpen(false)}
+              onCapture={handleRegisterFingerprint}
+              clientName={name || 'Nuevo Cliente'}
+            />
 
             {step === 3 && (
               <div className="space-y-4">

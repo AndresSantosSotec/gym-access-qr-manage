@@ -1,54 +1,57 @@
 import type { Role, PermissionKey } from '@/types/models';
+import { api } from './api.service';
 
-const ROLES_KEY = 'gymflow_roles';
+function mapRoleFromApi(data: any): Role {
+  return {
+    ...data,
+    id: String(data.id),
+    permissions: Array.isArray(data.permissions)
+      ? data.permissions.map((p: any) => p.slug || p.name)
+      : []
+  };
+}
 
 export const rolesService = {
   getAllRoles: async (): Promise<Role[]> => {
-    return await window.spark.kv.get<Role[]>(ROLES_KEY) || [];
+    try {
+      const response = await api.get<any[]>('/roles');
+      return response.data.map(mapRoleFromApi);
+    } catch (e) {
+      console.error('Error fetching roles:', e);
+      return [];
+    }
   },
 
   getRoleById: async (id: string): Promise<Role | undefined> => {
-    const roles = await rolesService.getAllRoles();
-    return roles.find(r => r.id === id);
+    try {
+      const response = await api.get(`/roles/${id}`);
+      return mapRoleFromApi(response.data);
+    } catch (e) {
+      return undefined;
+    }
   },
 
   createRole: async (data: Omit<Role, 'id' | 'createdAt'>): Promise<Role> => {
-    const roles = await rolesService.getAllRoles();
-    
-    const newRole: Role = {
-      ...data,
-      id: `role-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-    };
-
-    const updated = [...roles, newRole];
-    await window.spark.kv.set(ROLES_KEY, updated);
-    
-    return newRole;
+    const response = await api.post('/roles', data);
+    return mapRoleFromApi(response.data);
   },
 
   updateRole: async (id: string, data: Partial<Omit<Role, 'id' | 'createdAt'>>): Promise<Role | null> => {
-    const roles = await rolesService.getAllRoles();
-    const index = roles.findIndex(r => r.id === id);
-    
-    if (index === -1) return null;
-
-    const updated = roles.map(r => 
-      r.id === id ? { ...r, ...data } : r
-    );
-    
-    await window.spark.kv.set(ROLES_KEY, updated);
-    return updated[index];
+    try {
+      const response = await api.put(`/roles/${id}`, data);
+      return mapRoleFromApi(response.data);
+    } catch (e) {
+      return null;
+    }
   },
 
   deleteRole: async (id: string): Promise<boolean> => {
-    const roles = await rolesService.getAllRoles();
-    const filtered = roles.filter(r => r.id !== id);
-    
-    if (filtered.length === roles.length) return false;
-    
-    await window.spark.kv.set(ROLES_KEY, filtered);
-    return true;
+    try {
+      await api.delete(`/roles/${id}`);
+      return true;
+    } catch (e) {
+      return false;
+    }
   },
 
   hasPermission: async (roleId: string, permission: PermissionKey): Promise<boolean> => {

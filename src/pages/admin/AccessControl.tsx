@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,9 +14,21 @@ export function AccessControl() {
   const [verificationResult, setVerificationResult] = useState<any>(null);
   const [isVerifying, setIsVerifying] = useState(false);
 
-  const recentLogs = accessService.getRecentLogs(15);
+  const [recentLogs, setRecentLogs] = useState<any[]>([]);
 
-  const handleVerify = () => {
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const logs = await accessService.getRecentLogs(15);
+        setRecentLogs(Array.isArray(logs) ? logs : []);
+      } catch (error) {
+        console.error('Error fetching logs:', error);
+      }
+    };
+    fetchLogs();
+  }, []);
+
+  const handleVerify = async () => {
     if (!qrCode.trim()) {
       toast.error('Ingresa un código QR');
       return;
@@ -24,17 +36,25 @@ export function AccessControl() {
 
     setIsVerifying(true);
 
-    setTimeout(() => {
-      const result = accessService.verifyAccess(qrCode);
+    try {
+      const result = await accessService.verifyAccess(qrCode); // Await the async result
       setVerificationResult(result);
-      setIsVerifying(false);
 
       if (result.allowed) {
         toast.success(result.message);
+        // Refresh logs after successful verification
+        try {
+          const logs = await accessService.getRecentLogs(15);
+          setRecentLogs(Array.isArray(logs) ? logs : []);
+        } catch (e) { }
       } else {
         toast.error(result.message);
       }
-    }, 500);
+    } catch (e) {
+      toast.error('Error al verificar');
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   const handleClear = () => {
@@ -80,11 +100,10 @@ export function AccessControl() {
 
             {verificationResult && (
               <div
-                className={`p-6 rounded-lg border-2 ${
-                  verificationResult.allowed
-                    ? 'bg-green-50 border-green-500'
-                    : 'bg-red-50 border-red-500'
-                }`}
+                className={`p-6 rounded-lg border-2 ${verificationResult.allowed
+                  ? 'bg-green-50 border-green-500'
+                  : 'bg-red-50 border-red-500'
+                  }`}
               >
                 <div className="flex items-start gap-4">
                   {verificationResult.allowed ? (
@@ -92,12 +111,11 @@ export function AccessControl() {
                   ) : (
                     <XCircle className="text-red-600 flex-shrink-0" size={48} weight="fill" />
                   )}
-                  
+
                   <div className="flex-1">
                     <h3
-                      className={`text-xl font-bold mb-2 ${
-                        verificationResult.allowed ? 'text-green-900' : 'text-red-900'
-                      }`}
+                      className={`text-xl font-bold mb-2 ${verificationResult.allowed ? 'text-green-900' : 'text-red-900'
+                        }`}
                     >
                       {verificationResult.message}
                     </h3>

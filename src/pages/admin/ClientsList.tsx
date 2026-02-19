@@ -14,7 +14,8 @@ import type { Client, MembershipPlan } from '@/types/models';
 
 export function ClientsList() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [clients, setClients] = useState(() => clientsService.getAll());
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
 
@@ -30,13 +31,30 @@ export function ClientsList() {
     loadPlans();
   }, []);
 
-  const filteredClients = useMemo(() => {
-    if (!searchQuery) return clients;
-    return clientsService.search(searchQuery);
-  }, [searchQuery, clients]);
+  useEffect(() => {
+    const fetchClients = async () => {
+      setLoading(true);
+      try {
+        const data = await clientsService.getAll({ search: searchQuery });
+        setClients(data);
+      } catch (error) {
+        console.error('Error fetching clients', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const handleWizardSuccess = () => {
-    setClients(clientsService.getAll());
+    // Debounce search
+    const timeoutId = setTimeout(() => {
+      fetchClients();
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
+
+  const handleWizardSuccess = async () => {
+    const data = await clientsService.getAll();
+    setClients(data);
   };
 
   const getStatusBadge = (client: Client) => {
@@ -151,7 +169,7 @@ export function ClientsList() {
         </CardHeader>
         <CardContent>
           <DataTable
-            data={filteredClients}
+            data={clients}
             columns={columns}
             emptyMessage={searchQuery ? 'No se encontraron clientes para tu búsqueda' : 'No hay clientes registrados'}
           />
