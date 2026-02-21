@@ -8,9 +8,12 @@ import {
     Plus,
     ArrowRight,
     CurrencyDollar,
-    User
+    User,
+    Printer,
+    Receipt,
 } from '@phosphor-icons/react';
 import { commercialService } from '@/services/commercial.service';
+import { receiptsService } from '@/services/receipts.service';
 import type { Venta } from '@/types/models';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,6 +39,9 @@ export function SalesHistory() {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedSale, setSelectedSale] = useState<Venta | null>(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+    const [previewHtml, setPreviewHtml] = useState('');
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [previewLoading, setPreviewLoading] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -80,6 +86,43 @@ export function SalesHistory() {
             loadSales();
         } catch (error: any) {
             toast.error(error.response?.data?.message || 'Error al procesar conversión');
+        }
+    };
+
+    /** Preview receipt and open print dialog */
+    const handlePrintReceipt = async (receiptId: number) => {
+        try {
+            setPreviewLoading(true);
+            const html = await receiptsService.previewReceipt(receiptId);
+            setPreviewHtml(html);
+            setPreviewOpen(true);
+        } catch {
+            toast.error('Error al cargar el recibo');
+        } finally {
+            setPreviewLoading(false);
+        }
+    };
+
+    /** Preview 80mm ticket and open print dialog */
+    const handlePrintTicket = async (receiptId: number) => {
+        try {
+            setPreviewLoading(true);
+            const html = await receiptsService.previewTicket(receiptId);
+            setPreviewHtml(html);
+            setPreviewOpen(true);
+        } catch {
+            toast.error('Error al cargar el ticket');
+        } finally {
+            setPreviewLoading(false);
+        }
+    };
+
+    const handlePrintWindow = () => {
+        const win = window.open('', '', 'width=900,height=700');
+        if (win) {
+            win.document.write(previewHtml);
+            win.document.close();
+            setTimeout(() => win.print(), 300);
         }
     };
 
@@ -181,6 +224,7 @@ export function SalesHistory() {
                                     <TableHead>Cliente</TableHead>
                                     <TableHead>Total</TableHead>
                                     <TableHead>Estado</TableHead>
+                                    <TableHead>Recibo</TableHead>
                                     <TableHead className="text-right">Acciones</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -210,6 +254,32 @@ export function SalesHistory() {
                                                 {sale.estado}
                                             </Badge>
                                         </TableCell>
+                                        <TableCell>
+                                            {sale.receipt ? (
+                                                <div className="flex gap-1">
+                                                    <Button
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        className="h-8 w-8"
+                                                        title="Ver / Imprimir Recibo A4"
+                                                        onClick={() => handlePrintReceipt(sale.receipt!.id)}
+                                                    >
+                                                        <Receipt size={16} />
+                                                    </Button>
+                                                    <Button
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        className="h-8 w-8"
+                                                        title="Imprimir Ticket 80mm"
+                                                        onClick={() => handlePrintTicket(sale.receipt!.id)}
+                                                    >
+                                                        <Printer size={16} />
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground">-</span>
+                                            )}
+                                        </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">
                                                 <Button
@@ -234,6 +304,7 @@ export function SalesHistory() {
                                                 )}
                                             </div>
                                         </TableCell>
+
                                     </TableRow>
                                 ))}
                                 {filteredSales.length === 0 && (
@@ -248,6 +319,31 @@ export function SalesHistory() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Receipt Preview Dialog */}
+            <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+                <DialogContent className="max-w-4xl max-h-[85vh] overflow-auto">
+                    <DialogHeader>
+                        <DialogTitle>Vista Previa del Comprobante</DialogTitle>
+                        <DialogDescription>Revisa el comprobante antes de imprimir.</DialogDescription>
+                    </DialogHeader>
+                    <div className="flex gap-2 mb-4">
+                        <Button onClick={handlePrintWindow} disabled={previewLoading}>
+                            <Printer className="w-4 h-4 mr-2" />
+                            Imprimir
+                        </Button>
+                        <Button variant="outline" onClick={() => setPreviewOpen(false)}>Cerrar</Button>
+                    </div>
+                    {previewLoading ? (
+                        <div className="text-center py-12 text-muted-foreground">Cargando comprobante...</div>
+                    ) : (
+                        <div
+                            className="border rounded-lg p-4 bg-white"
+                            dangerouslySetInnerHTML={{ __html: previewHtml }}
+                        />
+                    )}
+                </DialogContent>
+            </Dialog>
 
             {/* Details Modal */}
             <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>

@@ -167,6 +167,7 @@ export const membershipsService = {
     paymentType: 'single' | 'installments' = 'single',
     numInstallments?: number,
     initialPayment?: number,
+    inscriptionFee?: number,
   ) => {
     const response = await api.post('/memberships/assign', {
       client_id: clientId,
@@ -177,6 +178,7 @@ export const membershipsService = {
       payment_type: paymentType,
       num_installments: numInstallments,
       initial_payment: initialPayment,
+      inscription_fee: inscriptionFee,
     });
     return response.data;
   },

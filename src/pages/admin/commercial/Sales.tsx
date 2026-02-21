@@ -8,9 +8,12 @@ import {
     Trash,
     FileText,
     CreditCard,
-    X
+    X,
+    Printer,
+    Receipt,
 } from '@phosphor-icons/react';
 import { commercialService } from '@/services/commercial.service';
+import { receiptsService } from '@/services/receipts.service';
 import type { Producto, ClienteVenta, MetodoPago } from '@/types/models';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +54,8 @@ export function Sales() {
 
     const [isClientModalOpen, setIsClientModalOpen] = useState(false);
     const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+    const [postSaleOpen, setPostSaleOpen] = useState(false);
+    const [postSaleHtml, setPostSaleHtml] = useState('');
 
     const [newClient, setNewClient] = useState({
         nombre: '',
@@ -147,7 +152,7 @@ export function Sales() {
                 pagos: saleType === 'PAGADA' ? payments : []
             };
 
-            await commercialService.createSale(payload);
+            const result = await commercialService.createSale(payload);
             toast.success(saleType === 'PAGADA' ? 'Venta realizada con éxito' : 'Cotización guardada');
 
             setCart([]);
@@ -155,6 +160,17 @@ export function Sales() {
             setPayments([]);
             setIsCheckoutModalOpen(false);
             loadData();
+
+            // Auto-print ticket after paid sale
+            if (saleType === 'PAGADA' && result?.receipt?.id) {
+                try {
+                    const html = await receiptsService.previewTicket(result.receipt.id);
+                    setPostSaleHtml(html);
+                    setPostSaleOpen(true);
+                } catch {
+                    // Non-critical: just skip auto-print
+                }
+            }
         } catch (error: any) {
             toast.error(error.response?.data?.message || 'Error al procesar la venta');
         }
@@ -488,6 +504,40 @@ export function Sales() {
                         </div>
                         <Button className="font-bold px-8 h-12" onClick={handleCheckout}>CONFIRMAR PAGO</Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Post-Sale Ticket Dialog */}
+            <Dialog open={postSaleOpen} onOpenChange={setPostSaleOpen}>
+                <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Receipt className="text-green-600" size={22} />
+                            ¡Venta Completada! — Comprobante listo
+                        </DialogTitle>
+                        <DialogDescription>
+                            Puedes imprimir el ticket de 80mm o el recibo completo ahora.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex gap-2 my-3">
+                        <Button
+                            className="gap-2"
+                            onClick={() => {
+                                const win = window.open('', '', 'width=350,height=700');
+                                if (win) { win.document.write(postSaleHtml); win.document.close(); setTimeout(() => win.print(), 300); }
+                            }}
+                        >
+                            <Printer size={16} />
+                            Imprimir Ticket 80mm
+                        </Button>
+                        <Button variant="outline" onClick={() => setPostSaleOpen(false)}>
+                            Omitir
+                        </Button>
+                    </div>
+                    <div
+                        className="border rounded-lg p-3 bg-white"
+                        dangerouslySetInnerHTML={{ __html: postSaleHtml }}
+                    />
                 </DialogContent>
             </Dialog>
         </div>

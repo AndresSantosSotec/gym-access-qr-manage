@@ -9,8 +9,27 @@ import { DataTable, ColumnDef } from '@/components/DataTable';
 import { clientsService } from '@/services/clients.service';
 import { membershipsService } from '@/services/memberships.service';
 import { formatShortDate, getDaysRemaining } from '@/utils/date';
-import { MagnifyingGlass, UserPlus, Eye, UsersThree } from '@phosphor-icons/react';
+import { MagnifyingGlass, UserPlus, Eye, UsersThree, DotsThree, PencilSimple, Trash } from '@phosphor-icons/react';
 import type { Client, MembershipPlan } from '@/types/models';
+import { toast } from 'sonner';
+
+import { ClientEditModal } from '@/components/ClientEditModal';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export function ClientsList() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -18,6 +37,10 @@ export function ClientsList() {
   const [loading, setLoading] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
+
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [deletingClient, setDeletingClient] = useState<Client | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const loadPlans = async () => {
@@ -57,9 +80,32 @@ export function ClientsList() {
     setClients(data);
   };
 
+  const handleDelete = async () => {
+    if (!deletingClient) return;
+    setIsDeleting(true);
+    try {
+      const success = await clientsService.delete(deletingClient.id);
+      if (success) {
+        toast.success('Cliente eliminado');
+        const data = await clientsService.getAll();
+        setClients(data);
+      } else {
+        toast.error('Error al eliminar cliente');
+      }
+    } catch {
+      toast.error('Error al eliminar cliente');
+    } finally {
+      setIsDeleting(false);
+      setDeletingClient(null);
+    }
+  };
+
   const getStatusBadge = (client: Client) => {
     if (client.status === 'ACTIVE') {
-      const daysRemaining = client.membershipEnd ? getDaysRemaining(client.membershipEnd) : 0;
+      if (!client.membershipEnd) {
+        return <Badge variant="secondary">Sin membresía</Badge>;
+      }
+      const daysRemaining = getDaysRemaining(client.membershipEnd);
       if (daysRemaining < 0) {
         return <Badge variant="destructive">Vencido</Badge>;
       }
@@ -127,12 +173,27 @@ export function ClientsList() {
       headerClassName: 'text-right',
       className: 'text-right',
       cell: (client) => (
-        <Link to={`/admin/clients/${client.id}`}>
-          <Button variant="ghost" size="sm">
-            <Eye className="mr-2" size={16} />
-            Ver
-          </Button>
-        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0">
+              <span className="sr-only">Abrir menú</span>
+              <DotsThree size={20} weight="bold" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem asChild>
+              <Link to={`/admin/clients/${client.id}`} className="flex items-center cursor-pointer w-full">
+                <Eye className="mr-2" size={16} /> Ver Detalles
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setEditingClient(client)} className="cursor-pointer">
+              <PencilSimple className="mr-2" size={16} /> Editar
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setDeletingClient(client)} className="text-red-600 focus:bg-red-50 focus:text-red-600 cursor-pointer">
+              <Trash className="mr-2" size={16} /> Eliminar
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )
     }
   ];
@@ -182,6 +243,34 @@ export function ClientsList() {
         onSuccess={handleWizardSuccess}
         plans={plans}
       />
+
+      <ClientEditModal
+        client={editingClient}
+        open={!!editingClient}
+        onClose={() => setEditingClient(null)}
+        onSuccess={handleWizardSuccess}
+      />
+
+      <AlertDialog open={!!deletingClient} onOpenChange={(open) => !open && setDeletingClient(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar cliente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. Se eliminarán permanentemente los datos del cliente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

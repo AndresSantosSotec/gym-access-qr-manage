@@ -1,0 +1,1463 @@
+commit 3ddb5771cec51b7ade1c4b4187cf0b8c736850d7
+Author: Pablo Santos <121809720+AndresSantosSotec@users.noreply.github.com>
+Date:   Mon Feb 16 09:07:31 2026 -0600
+
+    Backedn cambio
+
+diff --git a/src/pages/admin/Payments.tsx b/src/pages/admin/Payments.tsx
+index 248c21d..cbb3c0d 100644
+--- a/src/pages/admin/Payments.tsx
++++ b/src/pages/admin/Payments.tsx
+@@ -1,4 +1,4 @@
+-import { useState } from 'react';
++import { useState, useEffect } from 'react';
+ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+ import { Badge } from '@/components/ui/badge';
+ import { Button } from '@/components/ui/button';
+@@ -12,6 +12,13 @@ import {
+   DialogHeader,
+   DialogTitle,
+ } from '@/components/ui/dialog';
++import {
++  Select,
++  SelectContent,
++  SelectItem,
++  SelectTrigger,
++  SelectValue,
++} from '@/components/ui/select';
+ import {
+   Table,
+   TableBody,
+@@ -20,328 +27,461 @@ import {
+   TableHeader,
+   TableRow,
+ } from '@/components/ui/table';
+-import {
+-  Select,
+-  SelectContent,
+-  SelectItem,
+-  SelectTrigger,
+-  SelectValue,
+-} from '@/components/ui/select';
+-import { paymentsService } from '@/services/payments.service';
+-import { clientsService } from '@/services/clients.service';
++import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
++import { api } from '@/services/api.service';
+ import { membershipsService } from '@/services/memberships.service';
+ import { formatCurrency, formatDate } from '@/utils/date';
+-import { Plus, CreditCard, Money, Bank, Lightning, Warning } from '@phosphor-icons/react';
++import {
++  CreditCard,
++  Money,
++  Bank,
++  Lightning,
++  CalendarBlank,
++  Warning,
++  CheckCircle,
++  ArrowsClockwise,
++  CurrencyCircleDollar,
++  Receipt,
++} from '@phosphor-icons/react';
+ import { toast } from 'sonner';
++import { cn } from '@/lib/utils';
++import type { PaymentInstallment } from '@/types/models';
++
++// ‘ˆ«‘ˆ«‘ˆ« Helpers ‘ˆ«‘ˆ«‘ˆ«
++function fmtDate(d: string) {
++  if (!d) return '-';
++  return new Date(d).toLocaleDateString('es-GT', {
++    day: '2-digit',
++    month: 'short',
++    year: 'numeric',
++  });
++}
++
++function statusLabel(s: string) {
++  const map: Record<string, string> = {
++    pending: 'Pendiente',
++    partial: 'Parcial',
++    paid: 'Pagado',
++    overdue: 'Vencido',
++    completed: 'Completado',
++    failed: 'Fallido',
++  };
++  return map[s?.toLowerCase()] || s;
++}
+ 
++function statusVariant(s: string): 'default' | 'secondary' | 'destructive' | 'outline' {
++  switch (s?.toLowerCase()) {
++    case 'paid':
++    case 'completed':
++      return 'default';
++    case 'partial':
++      return 'secondary';
++    case 'overdue':
++    case 'failed':
++      return 'destructive';
++    default:
++      return 'outline';
++  }
++}
++
++function methodIcon(m: string) {
++  switch (m?.toLowerCase()) {
++    case 'cash':
++      return <Money size={16} weight="fill" />;
++    case 'card':
++      return <CreditCard size={16} />;
++    case 'transfer':
++      return <Bank size={16} />;
++    case 'stripe':
++      return <Lightning size={16} weight="fill" />;
++    default:
++      return <Money size={16} />;
++  }
++}
++
++function methodLabel(m: string) {
++  const map: Record<string, string> = {
++    cash: 'Efectivo',
++    card: 'Tarjeta',
++    transfer: 'Transferencia',
++    stripe: 'Stripe',
++  };
++  return map[m?.toLowerCase()] || m;
++}
++
++// ‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…
++// MAIN PAGE
++// ‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…
+ export function Payments() {
+-  const [payments, setPayments] = useState(paymentsService.getAllPayments());
+-  const [isManualDialogOpen, setIsManualDialogOpen] = useState(false);
+-  const [formData, setFormData] = useState({
+-    clientId: '',
+-    planId: '',
++  return (
++    <div className="p-6 lg:p-8 space-y-6">
++      <div>
++        <h1 className="text-3xl font-bold tracking-tight">Pagos & Cuotas</h1>
++        <p className="text-muted-foreground mt-1">
++          Gesti+¶n de pagos, cuotas de membres+°a y plan de financiamiento
++        </p>
++      </div>
++
++      <Tabs defaultValue="installments" className="w-full">
++        <TabsList className="w-full sm:w-auto gap-1 p-1.5 bg-muted/80">
++          <TabsTrigger value="installments" className="gap-1.5">
++            <CalendarBlank size={16} weight="fill" /> Cuotas Pendientes
++          </TabsTrigger>
++          <TabsTrigger value="payments" className="gap-1.5">
++            <Receipt size={16} weight="fill" /> Historial de Pagos
++          </TabsTrigger>
++        </TabsList>
++
++        <TabsContent value="installments" className="mt-4">
++          <InstallmentsTab />
++        </TabsContent>
++
++        <TabsContent value="payments" className="mt-4">
++          <PaymentsHistoryTab />
++        </TabsContent>
++      </Tabs>
++    </div>
++  );
++}
++
++// ‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…
++// TAB 1: INSTALLMENTS (CUOTAS)
++// ‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…
++function InstallmentsTab() {
++  const [installments, setInstallments] = useState<PaymentInstallment[]>([]);
++  const [summary, setSummary] = useState<any>(null);
++  const [isLoading, setIsLoading] = useState(true);
++  const [filter, setFilter] = useState<'all' | 'pending' | 'overdue' | 'paid'>('all');
++
++  // Pay dialog state
++  const [payDialogOpen, setPayDialogOpen] = useState(false);
++  const [selectedInstallment, setSelectedInstallment] = useState<PaymentInstallment | null>(null);
++  const [payForm, setPayForm] = useState({
+     amount: '',
+-    method: 'CASH' as 'CASH' | 'CARD' | 'TRANSFER',
++    payment_method: 'cash',
+     reference: '',
++    notes: '',
+   });
++  const [isPaying, setIsPaying] = useState(false);
+ 
+-  const clients = clientsService.getAll();
+-  const plans = membershipsService.getPlans();
++  useEffect(() => {
++    loadData();
++  }, []);
+ 
+-  const handleCreateManualPayment = () => {
+-    if (!formData.clientId || !formData.planId || !formData.amount) {
+-      toast.error('Por favor completa todos los campos requeridos');
+-      return;
++  const loadData = async () => {
++    try {
++      setIsLoading(true);
++      const [installmentsRes, summaryRes] = await Promise.all([
++        membershipsService.getInstallments(),
++        membershipsService.getInstallmentSummary(),
++      ]);
++      setInstallments(installmentsRes);
++      setSummary(summaryRes);
++    } catch (e) {
++      toast.error('Error al cargar cuotas');
++      console.error(e);
++    } finally {
++      setIsLoading(false);
+     }
++  };
+ 
+-    paymentsService.createManualPayment({
+-      clientId: formData.clientId,
+-      planId: formData.planId,
+-      amount: parseFloat(formData.amount),
+-      method: formData.method,
+-      reference: formData.reference || undefined,
+-      status: 'PAID',
+-    });
++  const filtered = installments.filter((i) => {
++    if (filter === 'pending') return i.status === 'pending' || i.status === 'partial';
++    if (filter === 'overdue') return i.status === 'overdue' || (i.status !== 'paid' && new Date(i.due_date) < new Date());
++    if (filter === 'paid') return i.status === 'paid';
++    return true;
++  });
+ 
+-    setPayments(paymentsService.getAllPayments());
+-    setIsManualDialogOpen(false);
+-    setFormData({
+-      clientId: '',
+-      planId: '',
+-      amount: '',
+-      method: 'CASH',
++  const openPayDialog = (inst: PaymentInstallment) => {
++    setSelectedInstallment(inst);
++    const remaining = inst.amount - inst.amount_paid;
++    setPayForm({
++      amount: remaining.toFixed(2),
++      payment_method: 'cash',
+       reference: '',
++      notes: '',
+     });
+-    toast.success('Pago registrado exitosamente');
++    setPayDialogOpen(true);
+   };
+ 
+-  const getMethodIcon = (method: string) => {
+-    switch (method) {
+-      case 'cash': return <Money size={18} weight="fill" />;
+-      case 'card': return <CreditCard size={18} />;
+-      case 'transfer': return <Bank size={18} />;
+-      case 'stripe': return <Lightning size={18} weight="fill" />;
+-      default: return <Money size={18} />;
++  const handlePay = async () => {
++    if (!selectedInstallment || !payForm.amount) return;
++    setIsPaying(true);
++    try {
++      const result = await membershipsService.payInstallment(
++        selectedInstallment.id,
++        parseFloat(payForm.amount),
++        payForm.payment_method,
++        payForm.reference || undefined,
++        payForm.notes || undefined,
++      );
++      toast.success(result.message || 'Pago registrado exitosamente');
++      setPayDialogOpen(false);
++      loadData();
++    } catch (e: any) {
++      toast.error(e.response?.data?.message || 'Error al procesar pago');
++    } finally {
++      setIsPaying(false);
+     }
+   };
+ 
+-  const getMethodLabel = (method: string) => {
+-    const labels: Record<string, string> = {
+-      cash: 'Efectivo',
+-      card: 'Tarjeta',
+-      transfer: 'Transferencia',
+-      stripe: 'Stripe',
+-    };
+-    return labels[method] || method;
+-  };
+-
+-  const getStatusBadge = (status: string) => {
+-    const variants = {
+-      paid: 'default',
+-      pending: 'secondary',
+-      failed: 'destructive',
+-    } as const;
+-
+-    const labels = {
+-      paid: 'Pagado',
+-      pending: 'Pendiente',
+-      failed: 'Fallido',
+-    };
+-
++  if (isLoading) {
+     return (
+-      <Badge variant={variants[status as keyof typeof variants]}>
+-        {labels[status as keyof typeof labels]}
+-      </Badge>
++      <div className="h-64 flex flex-col items-center justify-center gap-3">
++        <ArrowsClockwise className="animate-spin text-primary" size={32} />
++        <p className="text-muted-foreground text-sm">Cargando cuotas...</p>
++      </div>
+     );
+-  };
+-
+-  const totalRevenue = paymentsService.getTotalRevenue();
+-  const paidPayments = payments.filter(p => p.status === 'PAID');
+-  const pendingPayments = payments.filter(p => p.status === 'PENDING');
++  }
+ 
+   return (
+-    <div className="p-6 lg:p-8 space-y-6">
+-      <div className="flex items-center justify-between">
+-        <div>
+-          <h1 className="text-3xl font-bold tracking-tight">Pagos</h1>
+-          <p className="text-muted-foreground mt-1">
+-            Gesti+¶n de pagos y transacciones
+-          </p>
++    <div className="space-y-6">
++      {/* Summary Cards */}
++      {summary && (
++        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
++          <Card className="border-red-200 bg-red-50/50">
++            <CardHeader className="pb-2">
++              <CardDescription className="text-red-600 font-medium text-xs">Cuotas Vencidas</CardDescription>
++              <CardTitle className="text-2xl text-red-700">{summary.overdue_count}</CardTitle>
++            </CardHeader>
++            <CardContent className="pt-0">
++              <p className="text-sm font-semibold text-red-600">{formatCurrency(summary.overdue_amount)}</p>
++            </CardContent>
++          </Card>
++          <Card className="border-amber-200 bg-amber-50/50">
++            <CardHeader className="pb-2">
++              <CardDescription className="text-amber-600 font-medium text-xs">Pr+¶ximas 7 D+°as</CardDescription>
++              <CardTitle className="text-2xl text-amber-700">{summary.due_soon_count}</CardTitle>
++            </CardHeader>
++            <CardContent className="pt-0">
++              <p className="text-sm font-semibold text-amber-600">{formatCurrency(summary.due_soon_amount)}</p>
++            </CardContent>
++          </Card>
++          <Card className="border-blue-200 bg-blue-50/50">
++            <CardHeader className="pb-2">
++              <CardDescription className="text-blue-600 font-medium text-xs">Cuotas Pendientes</CardDescription>
++              <CardTitle className="text-2xl text-blue-700">{summary.total_pending_count}</CardTitle>
++            </CardHeader>
++            <CardContent className="pt-0">
++              <p className="text-sm font-semibold text-blue-600">{formatCurrency(summary.total_pending_amount)}</p>
++            </CardContent>
++          </Card>
+         </div>
+-        <Button onClick={() => setIsManualDialogOpen(true)} className="gap-2">
+-          <Plus size={20} />
+-          Registrar Pago Manual
+-        </Button>
+-      </div>
+-
+-      <div className="grid gap-4 md:grid-cols-4">
+-        <Card>
+-          <CardHeader className="pb-3">
+-            <CardDescription>Ingresos Totales</CardDescription>
+-            <CardTitle className="text-3xl text-green-600">
+-              {formatCurrency(totalRevenue)}
+-            </CardTitle>
+-          </CardHeader>
+-        </Card>
+-        <Card>
+-          <CardHeader className="pb-3">
+-            <CardDescription>Pagos Completados</CardDescription>
+-            <CardTitle className="text-3xl">{paidPayments.length}</CardTitle>
+-          </CardHeader>
+-        </Card>
+-        <Card>
+-          <CardHeader className="pb-3">
+-            <CardDescription>Pendientes</CardDescription>
+-            <CardTitle className="text-3xl text-yellow-600">
+-              {pendingPayments.length}
+-            </CardTitle>
+-          </CardHeader>
+-        </Card>
+-        <Card>
+-          <CardHeader className="pb-3">
+-            <CardDescription>Este Mes</CardDescription>
+-            <CardTitle className="text-3xl">
+-              {payments.filter(p => {
+-                const date = new Date(p.createdAt);
+-                const now = new Date();
+-                return date.getMonth() === now.getMonth() && 
+-                       date.getFullYear() === now.getFullYear();
+-              }).length}
+-            </CardTitle>
+-          </CardHeader>
+-        </Card>
+-      </div>
++      )}
+ 
+-      <Card className="bg-gradient-to-br from-blue-50 to-purple-50 border-blue-200">
++      {/* Installments Table */}
++      <Card>
+         <CardHeader>
+-          <div className="flex items-start gap-3">
+-            <Warning size={24} className="text-blue-600 mt-1" weight="fill" />
++          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+             <div>
+-              <CardTitle className="text-blue-900">Integraci+¶n Stripe (Demo)</CardTitle>
+-              <CardDescription className="text-blue-700">
+-                Esta es una simulaci+¶n de Stripe. Para implementaci+¶n real se requiere:
+-                <ul className="list-disc list-inside mt-2 space-y-1">
+-                  <li>Backend PHP/Node para crear sesiones de checkout</li>
+-                  <li>Webhook endpoint para recibir confirmaciones</li>
+-                  <li>Claves API de Stripe (public y secret key)</li>
+-                </ul>
+-                En producci+¶n, los pagos se procesan en /p/pago-demo?session=XXX
+-              </CardDescription>
++              <CardTitle>Cuotas de Membres+°a</CardTitle>
++              <CardDescription>Cuotas de planes de pago activos</CardDescription>
++            </div>
++            <div className="flex gap-1">
++              {(['all', 'pending', 'overdue', 'paid'] as const).map((f) => (
++                <Button
++                  key={f}
++                  size="sm"
++                  variant={filter === f ? 'default' : 'outline'}
++                  onClick={() => setFilter(f)}
++                  className={cn(
++                    'text-xs',
++                    f === 'overdue' && filter === f && 'bg-red-600 hover:bg-red-700',
++                    f === 'paid' && filter === f && 'bg-green-600 hover:bg-green-700',
++                  )}
++                >
++                  {f === 'all' ? 'Todas' : f === 'pending' ? 'Pendientes' : f === 'overdue' ? 'Vencidas' : 'Pagadas'}
++                </Button>
++              ))}
+             </div>
+           </div>
+         </CardHeader>
+-      </Card>
+-
+-      <Card>
+-        <CardHeader>
+-          <CardTitle>Historial de Pagos</CardTitle>
+-          <CardDescription>Todos los pagos registrados en el sistema</CardDescription>
+-        </CardHeader>
+         <CardContent>
+-          <Table>
+-            <TableHeader>
+-              <TableRow>
+-                <TableHead>ID</TableHead>
+-                <TableHead>Cliente</TableHead>
+-                <TableHead>Plan</TableHead>
+-                <TableHead>Monto</TableHead>
+-                <TableHead>M+Ætodo</TableHead>
+-                <TableHead>Estado</TableHead>
+-                <TableHead>Referencia</TableHead>
+-                <TableHead>Fecha</TableHead>
+-              </TableRow>
+-            </TableHeader>
+-            <TableBody>
+-              {payments.length === 0 ? (
+-                <TableRow>
+-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+-                    No hay pagos registrados
+-                  </TableCell>
++          <div className="overflow-x-auto">
++            <Table>
++              <TableHeader>
++                <TableRow className="hover:bg-transparent">
++                  <TableHead>Cuota</TableHead>
++                  <TableHead>Cliente</TableHead>
++                  <TableHead>Plan</TableHead>
++                  <TableHead className="text-center">Vencimiento</TableHead>
++                  <TableHead className="text-right">Monto</TableHead>
++                  <TableHead className="text-right">Pagado</TableHead>
++                  <TableHead className="text-right">Saldo</TableHead>
++                  <TableHead className="text-center">Estado</TableHead>
++                  <TableHead className="text-center">Acci+¶n</TableHead>
+                 </TableRow>
+-              ) : (
+-                payments.slice().reverse().map((payment) => {
+-                  const client = payment.clientId ? clientsService.getById(payment.clientId) : null;
+-                  const plan = membershipsService.getPlanById(payment.planId);
+-                  
++              </TableHeader>
++              <TableBody>
++                {filtered.map((inst) => {
++                  const remaining = inst.amount - inst.amount_paid;
++                  const isOverdue = inst.status !== 'paid' && new Date(inst.due_date) < new Date();
+                   return (
+-                    <TableRow key={payment.id}>
+-                      <TableCell className="font-mono text-xs">{payment.id}</TableCell>
++                    <TableRow
++                      key={inst.id}
++                      className={cn(isOverdue && 'bg-red-50/50')}
++                    >
++                      <TableCell className="font-mono font-bold text-sm">
++                        #{inst.installment_number}
++                      </TableCell>
+                       <TableCell className="font-medium">
+-                        {client?.name || 'Lead'}
++                        {inst.client
++                          ? `${inst.client.first_name} ${inst.client.last_name}`
++                          : `ID: ${inst.client_id}`}
++                      </TableCell>
++                      <TableCell className="text-sm text-muted-foreground">
++                        {inst.membership?.plan?.name || '-'}
+                       </TableCell>
+-                      <TableCell>{plan?.name || 'N/A'}</TableCell>
+-                      <TableCell className="font-bold text-green-600">
+-                        {formatCurrency(payment.amount)}
++                      <TableCell className="text-center">
++                        <span className={cn(
++                          'text-sm font-medium',
++                          isOverdue && 'text-red-600',
++                        )}>
++                          {fmtDate(inst.due_date)}
++                        </span>
+                       </TableCell>
+-                      <TableCell>
+-                        <div className="flex items-center gap-2">
+-                          {getMethodIcon(payment.method)}
+-                          {getMethodLabel(payment.method)}
+-                        </div>
++                      <TableCell className="text-right font-medium">
++                        {formatCurrency(inst.amount)}
+                       </TableCell>
+-                      <TableCell>{getStatusBadge(payment.status)}</TableCell>
+-                      <TableCell>
+-                        {payment.reference ? (
+-                          <code className="text-xs bg-muted px-2 py-1 rounded">
+-                            {payment.reference}
+-                          </code>
+-                        ) : (
+-                          <span className="text-muted-foreground">-</span>
++                      <TableCell className="text-right text-green-600 font-medium">
++                        {inst.amount_paid > 0 ? formatCurrency(inst.amount_paid) : '-'}
++                      </TableCell>
++                      <TableCell className="text-right font-bold">
++                        {remaining > 0 ? formatCurrency(remaining) : '-'}
++                      </TableCell>
++                      <TableCell className="text-center">
++                        <Badge variant={statusVariant(isOverdue ? 'overdue' : inst.status)}>
++                          {statusLabel(isOverdue ? 'overdue' : inst.status)}
++                        </Badge>
++                      </TableCell>
++                      <TableCell className="text-center">
++                        {inst.status !== 'paid' && (
++                          <Button
++                            size="sm"
++                            className="gap-1.5 bg-green-600 hover:bg-green-700"
++                            onClick={() => openPayDialog(inst)}
++                          >
++                            <CurrencyCircleDollar size={14} weight="fill" />
++                            Pagar
++                          </Button>
++                        )}
++                        {inst.status === 'paid' && (
++                          <CheckCircle size={20} weight="fill" className="text-green-600 mx-auto" />
+                         )}
+                       </TableCell>
+-                      <TableCell>{formatDate(payment.createdAt)}</TableCell>
+                     </TableRow>
+                   );
+-                })
+-              )}
+-            </TableBody>
+-          </Table>
++                })}
++                {filtered.length === 0 && (
++                  <TableRow>
++                    <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
++                      No se encontraron cuotas
++                    </TableCell>
++                  </TableRow>
++                )}
++              </TableBody>
++            </Table>
++          </div>
+         </CardContent>
+       </Card>
+ 
+-      <Dialog open={isManualDialogOpen} onOpenChange={setIsManualDialogOpen}>
+-        <DialogContent>
++      {/* Pay Dialog */}
++      <Dialog open={payDialogOpen} onOpenChange={setPayDialogOpen}>
++        <DialogContent className="max-w-md">
+           <DialogHeader>
+-            <DialogTitle>Registrar Pago Manual</DialogTitle>
++            <DialogTitle>Registrar Pago de Cuota</DialogTitle>
+             <DialogDescription>
+-              Registra un pago recibido fuera del sistema
++              {selectedInstallment && (
++                <>
++                  Cuota #{selectedInstallment.installment_number} ‘«ˆ{' '}
++                  Vence: {fmtDate(selectedInstallment.due_date)}
++                  <br />
++                  Saldo pendiente:{' '}
++                  <span className="font-bold text-foreground">
++                    {formatCurrency(selectedInstallment.amount - selectedInstallment.amount_paid)}
++                  </span>
++                </>
++              )}
+             </DialogDescription>
+           </DialogHeader>
+ 
+           <div className="space-y-4">
+             <div className="space-y-2">
+-              <Label htmlFor="client">Cliente *</Label>
+-              <Select value={formData.clientId} onValueChange={(v) => setFormData({ ...formData, clientId: v })}>
+-                <SelectTrigger id="client">
+-                  <SelectValue placeholder="Selecciona un cliente" />
+-                </SelectTrigger>
+-                <SelectContent>
+-                  {clients.map((client) => (
+-                    <SelectItem key={client.id} value={client.id}>
+-                      {client.name}
+-                    </SelectItem>
+-                  ))}
+-                </SelectContent>
+-              </Select>
++              <Label>Monto a Pagar (Q) *</Label>
++              <Input
++                type="number"
++                step="0.01"
++                value={payForm.amount}
++                onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })}
++                placeholder="0.00"
++              />
++              <p className="text-xs text-muted-foreground">
++                Puedes hacer un abono parcial o pagar la cuota completa
++              </p>
+             </div>
+ 
+             <div className="space-y-2">
+-              <Label htmlFor="plan">Plan *</Label>
+-              <Select value={formData.planId} onValueChange={(v) => setFormData({ ...formData, planId: v })}>
+-                <SelectTrigger id="plan">
+-                  <SelectValue placeholder="Selecciona un plan" />
++              <Label>M+Ætodo de Pago *</Label>
++              <Select
++                value={payForm.payment_method}
++                onValueChange={(v) => setPayForm({ ...payForm, payment_method: v })}
++              >
++                <SelectTrigger>
++                  <SelectValue />
+                 </SelectTrigger>
+                 <SelectContent>
+-                  {plans.map((plan) => (
+-                    <SelectItem key={plan.id} value={plan.id}>
+-                      {plan.name} - {formatCurrency(plan.price)}
+-                    </SelectItem>
+-                  ))}
++                  <SelectItem value="cash">
++                    <div className="flex items-center gap-2">
++                      <Money size={16} weight="fill" /> Efectivo
++                    </div>
++                  </SelectItem>
++                  <SelectItem value="card">
++                    <div className="flex items-center gap-2">
++                      <CreditCard size={16} /> Tarjeta
++                    </div>
++                  </SelectItem>
++                  <SelectItem value="transfer">
++                    <div className="flex items-center gap-2">
++                      <Bank size={16} /> Transferencia
++                    </div>
++                  </SelectItem>
+                 </SelectContent>
+               </Select>
+             </div>
+ 
+             <div className="space-y-2">
+-              <Label htmlFor="amount">Monto (Q) *</Label>
++              <Label>Referencia (opcional)</Label>
+               <Input
+-                id="amount"
+-                type="number"
+-                value={formData.amount}
+-                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+-                placeholder="250"
++                value={payForm.reference}
++                onChange={(e) => setPayForm({ ...payForm, reference: e.target.value })}
++                placeholder="N-¶ de recibo, boleta, etc."
+               />
+             </div>
+ 
+             <div className="space-y-2">
+-              <Label htmlFor="method">M+Ætodo de Pago *</Label>
+-              <Select value={formData.method} onValueChange={(v: any) => setFormData({ ...formData, method: v })}>
+-                <SelectTrigger id="method">
+-                  <SelectValue />
+-                </SelectTrigger>
+-                <SelectContent>
+-                  <SelectItem value="cash">Efectivo</SelectItem>
+-                  <SelectItem value="card">Tarjeta</SelectItem>
+-                  <SelectItem value="transfer">Transferencia</SelectItem>
+-                </SelectContent>
+-              </Select>
+-            </div>
+-
+-            <div className="space-y-2">
+-              <Label htmlFor="reference">Referencia (opcional)</Label>
++              <Label>Notas (opcional)</Label>
+               <Input
+-                id="reference"
+-                value={formData.reference}
+-                onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
+-                placeholder="N-¶ de transacci+¶n, recibo, etc."
++                value={payForm.notes}
++                onChange={(e) => setPayForm({ ...payForm, notes: e.target.value })}
++                placeholder="Observaciones del pago"
+               />
+             </div>
+           </div>
+ 
+           <DialogFooter>
+-            <Button variant="outline" onClick={() => setIsManualDialogOpen(false)}>
++            <Button variant="outline" onClick={() => setPayDialogOpen(false)}>
+               Cancelar
+             </Button>
+-            <Button onClick={handleCreateManualPayment}>
++            <Button
++              onClick={handlePay}
++              disabled={isPaying || !payForm.amount}
++              className="gap-2 bg-green-600 hover:bg-green-700"
++            >
++              {isPaying ? (
++                <ArrowsClockwise size={16} className="animate-spin" />
++              ) : (
++                <CurrencyCircleDollar size={16} weight="fill" />
++              )}
+               Registrar Pago
+             </Button>
+           </DialogFooter>
+@@ -350,3 +490,154 @@ export function Payments() {
+     </div>
+   );
+ }
++
++// ‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…
++// TAB 2: PAYMENTS HISTORY
++// ‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…‘Ú…
++function PaymentsHistoryTab() {
++  const [payments, setPayments] = useState<any[]>([]);
++  const [isLoading, setIsLoading] = useState(true);
++
++  useEffect(() => {
++    loadPayments();
++  }, []);
++
++  const loadPayments = async () => {
++    try {
++      setIsLoading(true);
++      const response = await api.get('/payments', { params: { per_page: 100 } });
++      setPayments(response.data.data || []);
++    } catch (e) {
++      toast.error('Error al cargar pagos');
++    } finally {
++      setIsLoading(false);
++    }
++  };
++
++  const totalRevenue = payments
++    .filter((p) => p.status === 'completed')
++    .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
++
++  const completedCount = payments.filter((p) => p.status === 'completed').length;
++  const pendingCount = payments.filter((p) => p.status === 'pending').length;
++  const thisMonth = payments.filter((p) => {
++    const date = new Date(p.created_at || p.paid_at);
++    const now = new Date();
++    return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
++  }).length;
++
++  if (isLoading) {
++    return (
++      <div className="h-64 flex flex-col items-center justify-center gap-3">
++        <ArrowsClockwise className="animate-spin text-primary" size={32} />
++        <p className="text-muted-foreground text-sm">Cargando pagos...</p>
++      </div>
++    );
++  }
++
++  return (
++    <div className="space-y-6">
++      {/* Summary Cards */}
++      <div className="grid gap-4 md:grid-cols-4">
++        <Card>
++          <CardHeader className="pb-3">
++            <CardDescription>Ingresos Totales</CardDescription>
++            <CardTitle className="text-3xl text-green-600">{formatCurrency(totalRevenue)}</CardTitle>
++          </CardHeader>
++        </Card>
++        <Card>
++          <CardHeader className="pb-3">
++            <CardDescription>Pagos Completados</CardDescription>
++            <CardTitle className="text-3xl">{completedCount}</CardTitle>
++          </CardHeader>
++        </Card>
++        <Card>
++          <CardHeader className="pb-3">
++            <CardDescription>Pendientes</CardDescription>
++            <CardTitle className="text-3xl text-yellow-600">{pendingCount}</CardTitle>
++          </CardHeader>
++        </Card>
++        <Card>
++          <CardHeader className="pb-3">
++            <CardDescription>Este Mes</CardDescription>
++            <CardTitle className="text-3xl">{thisMonth}</CardTitle>
++          </CardHeader>
++        </Card>
++      </div>
++
++      {/* Payments Table */}
++      <Card>
++        <CardHeader>
++          <CardTitle>Historial de Pagos</CardTitle>
++          <CardDescription>Todos los pagos registrados en el sistema</CardDescription>
++        </CardHeader>
++        <CardContent>
++          <div className="overflow-x-auto">
++            <Table>
++              <TableHeader>
++                <TableRow className="hover:bg-transparent">
++                  <TableHead>ID</TableHead>
++                  <TableHead>Cliente</TableHead>
++                  <TableHead className="text-right">Monto</TableHead>
++                  <TableHead>M+Ætodo</TableHead>
++                  <TableHead className="text-center">Estado</TableHead>
++                  <TableHead>Referencia</TableHead>
++                  <TableHead>Notas</TableHead>
++                  <TableHead>Fecha</TableHead>
++                </TableRow>
++              </TableHeader>
++              <TableBody>
++                {payments.map((p) => (
++                  <TableRow key={p.id}>
++                    <TableCell className="font-mono text-xs">#{p.id}</TableCell>
++                    <TableCell className="font-medium">
++                      {p.client
++                        ? `${p.client.first_name} ${p.client.last_name}`
++                        : '-'}
++                    </TableCell>
++                    <TableCell className="text-right font-bold text-green-600">
++                      {formatCurrency(parseFloat(p.amount))}
++                    </TableCell>
++                    <TableCell>
++                      <div className="flex items-center gap-1.5">
++                        {methodIcon(p.payment_method)}
++                        <span className="text-sm">{methodLabel(p.payment_method)}</span>
++                      </div>
++                    </TableCell>
++                    <TableCell className="text-center">
++                      <Badge variant={statusVariant(p.status)}>
++                        {statusLabel(p.status)}
++                      </Badge>
++                    </TableCell>
++                    <TableCell>
++                      {p.transaction_id ? (
++                        <code className="text-xs bg-muted px-2 py-1 rounded">
++                          {p.transaction_id}
++                        </code>
++                      ) : (
++                        <span className="text-muted-foreground">-</span>
++                      )}
++                    </TableCell>
++                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
++                      {p.notes || '-'}
++                    </TableCell>
++                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
++                      {fmtDate(p.paid_at || p.created_at)}
++                    </TableCell>
++                  </TableRow>
++                ))}
++                {payments.length === 0 && (
++                  <TableRow>
++                    <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
++                      No hay pagos registrados
++                    </TableCell>
++                  </TableRow>
++                )}
++              </TableBody>
++            </Table>
++          </div>
++        </CardContent>
++      </Card>
++    </div>
++  );
++}
+
+commit a0051f68b59afc5a64791ce155d23926aec0dc69
+Author: Pablo Santos <121809720+AndresSantosSotec@users.noreply.github.com>
+Date:   Wed Feb 4 15:04:06 2026 +0000
+
+    Generated by Spark: Act+¶a como un arquitecto y desarrollador senior frontend. Quiero que EXTIENDAS el MVP existente (React + Vite + TypeScript + React Router + Tailwind) para agregar nuevas funcionalidades, manteniendo el mismo estilo UI y la misma estructura del proyecto.
+    
+    IMPORTANTE:
+    - SOLO FRONTEND (sin backend real).
+    - Persistencia con localStorage mediante `utils/storage.ts`.
+    - Capa preparada para API futura en `services/`.
+    - Entregar C+ÙDIGO COMPLETO de los archivos que modifiques/crees (no snippets).
+    - Debe compilar en Vite.
+    - Mant+Æn el flujo de login admin y el layout admin ya existente.
+    - Si faltan archivos del MVP, crea los que necesites.
+    - Agrega un componente ‘«£Continue generating‘«ÿ (si no existe) o exp+Ìndelo con los nuevos pasos.
+    
+    ========================
+    NUEVAS FUNCIONALIDADES
+    ========================
+    
+    1) MEMBRES+ÏAS: CRUD + PUBLICACI+ÙN EN SUBP+¸GINA WEB
+    Objetivo:
+    - En el panel admin: poder crear/editar/eliminar ‘«£Planes de Membres+°a‘«ÿ.
+    - Publicarlos en una ‘«£sub p+Ìgina web‘«ÿ p+¶blica para captar clientes (sin login).
+    
+    Requisitos:
+    - Admin: pantalla `/admin/memberships` debe incluir:
+      - Tabla con planes (nombre, precio, duraci+¶n, estado publicado S+°/No)
+      - Bot+¶n ‘«£Nuevo plan‘«ÿ
+      - Editar
+      - Eliminar con confirmaci+¶n
+      - Toggle ‘«£Publicado‘«ÿ para mostrar/ocultar en la web p+¶blica
+    - Modelo MembershipPlan debe ampliarse:
+      - id, name, price, durationDays
+      - description (string)
+      - features (string[]) lista de beneficios
+      - published (boolean)
+      - slug (string) para URL p+¶blica (ej: ‘«£mensual‘«ÿ, ‘«£trimestral‘«ÿ)
+      - createdAt, updatedAt
+    
+    - P+Ìgina p+¶blica (sin login):
+      - `/p/planes` -> lista de planes publicados, dise+¶o tipo landing con cards
+      - `/p/planes/:slug` -> detalle del plan con CTA ‘«£Suscribirme‘«ÿ (lleva a formulario)
+      - debe ser mobile-first
+    
+    2) P+¸GINA WEB PERSONALIZADA DEL GIMNASIO + SECCI+ÙN TIPO BLOG (B+¸SICA)
+    Objetivo:
+    - Agregar una mini web p+¶blica ‘«£tipo sitio‘«ÿ para publicar info del gym:
+      - Home p+¶blica
+      - Planes
+      - Blog/Posts simples
+      - Contacto
+    - Debe existir un ‘«£modo personalizable‘«ÿ desde admin (configuraci+¶n simple).
+    
+    Rutas p+¶blicas:
+    - `/p` -> Home p+¶blica
+    - `/p/planes` y `/p/planes/:slug`
+    - `/p/blog` -> listado de posts
+    - `/p/blog/:slug` -> detalle del post
+    - `/p/contacto`
+    
+    Admin:
+    - `/admin/site` (o `/admin/settings/site`) configuraci+¶n del sitio:
+      - nombre del gym
+      - eslogan
+      - color principal (solo guardarlo; si se puede aplicarlo en clases Tailwind ok, sino placeholder)
+      - tel+Æfonos / redes
+      - texto ‘«£sobre nosotros‘«ÿ
+      - hero image URL (opcional)
+    - `/admin/blog` CRUD de posts:
+      - Crear/editar/eliminar posts
+      - Publicar/ocultar
+      - Campos: title, slug, excerpt, content (markdown o texto simple), coverImageUrl opcional, published boolean, createdAt
+    
+    3) CLIENTES: ‘«£SUSCRIPCI+ÙN‘«ÿ DESDE P+¸GINA P+‹BLICA (LEADS)
+    Objetivo:
+    - En la p+Ìgina p+¶blica de planes, bot+¶n ‘«£Suscribirme‘«ÿ.
+    - Debe abrir una p+Ìgina/formulario p+¶blico de suscripci+¶n:
+      - Ruta: `/p/suscripcion?plan=mensual` (plan por slug)
+      - Campos: nombre, tel+Æfono, email (opcional), plan elegido, m+Ætodo de pago preferido (efectivo/tarjeta)
+      - Al enviar: crear un registro ‘«£Lead‘«ÿ y/o ‘«£Cliente pendiente‘«ÿ en localStorage.
+    
+    Reglas:
+    - No crear membres+°a activa autom+Ìticamente: solo ‘«£Lead‘«ÿ o ‘«£ClientePendiente‘«ÿ.
+    - En admin debe existir un m+¶dulo para ver leads:
+      - `/admin/leads`
+      - Tabla con estado: NUEVO / CONTACTADO / CONVERTIDO
+      - Acci+¶n: ‘«£Convertir a cliente‘«ÿ (crea un Client real y abre modal de asignaci+¶n de membres+°a)
+    
+    4) BASE DE INTEGRACI+ÙN DE PAGOS CON STRIPE (FRONTEND ONLY)
+    Objetivo:
+    - No procesar pagos reales (sin backend).
+    - Preparar la UI y la estructura para Stripe.
+    - Pantalla admin `/admin/payments`:
+      - lista de pagos mock
+      - bot+¶n ‘«£Registrar pago manual‘«ÿ
+      - bot+¶n ‘«£Simular pago con Stripe‘«ÿ (modo demo)
+    
+    Requisitos t+Æcnicos:
+    - Crear `services/stripe.service.ts` que exponga funciones mock:
+      - `createCheckoutSession(planId, clientId)` -> retorna `{ sessionId: "cs_test_xxx", checkoutUrl: "/p/pago-demo?session=..." }`
+      - `simulateWebhookSuccess(sessionId)` -> crea Payment en localStorage y marca membres+°a vigente
+    - Crear p+Ìgina p+¶blica demo:
+      - `/p/pago-demo?session=...`
+      - UI de ‘«£Checkout simulado‘«ÿ
+      - Bot+¶n ‘«£Pagar‘«ÿ que ejecuta `simulateWebhookSuccess`
+      - Al terminar: mostrar ‘«£Pago exitoso‘«ÿ y regresar a `/p/qr/:clientId` (pase digital)
+    
+    IMPORTANTE: Aclarar en UI que es demo/mock y que para Stripe real se requiere backend para crear sesiones y recibir webhooks.
+    
+    ========================
+    ROADMAP PLANIFICADO / FUTURO (SOLO UI PLACEHOLDERS)
+    ========================
+    Agregar en el proyecto, pero solo como pantallas placeholder (sin l+¶gica completa):
+    - Roles y Permisos (Planificado):
+      - `/admin/roles`
+      - UI para crear roles (admin, recepcionista, entrenador)
+      - UI para asignar permisos por m+¶dulo (checkboxes)
+      - Sin enforcement real, solo data model + UI guardada en localStorage
+    
+    - Reportes y Analytics (Planificado):
+      - `/admin/reports`
+      - Dashboard avanzado con gr+Ìficos (puedes usar recharts si est+Ì disponible; si no, placeholders)
+      - KPIs: ingresos, asistencias, retenci+¶n
+      - Datos mock
+    
+    - Notificaciones Push (Futuro):
+      - `/admin/notifications`
+      - UI/placeholder: vencimientos y promociones, switches y plantillas de mensaje
+      - Sin env+°o real
+    
+    - Integraci+¶n con C+Ìmaras (Futuro):
+      - `/admin/cameras`
+      - UI/placeholder: ‘«£fuentes de c+Ìmara‘«ÿ, ‘«£zona de escaneo‘«ÿ, ‘«£estado‘«ÿ
+      - Sin integraci+¶n real
+    
+    ========================
+    ESTRUCTURA DE ARCHIVOS (extiende la existente)
+    ========================
+    /src
+      /pages
+        /admin
+          Memberships.tsx               (modificar si ya exist+°a)
+          SiteSettings.tsx              (nuevo)
+          BlogAdmin.tsx                 (nuevo)
+          Leads.tsx                     (nuevo)
+          Payments.tsx                  (nuevo)
+          Roles.tsx                     (nuevo placeholder)
+          Reports.tsx                   (nuevo placeholder)
+          Notifications.tsx             (nuevo placeholder)
+          Cameras.tsx                   (nuevo placeholder)
+        /public
+          PublicHome.tsx                (nuevo)
+          PublicPlans.tsx               (nuevo)
+          PublicPlanDetail.tsx          (nuevo)
+          PublicBlog.tsx                (nuevo)
+          PublicBlogDetail.tsx          (nuevo)
+          PublicContact.tsx             (nuevo)
+          PublicSubscribe.tsx           (nuevo)
+          PublicStripeDemoCheckout.tsx  (nuevo)
+      /services
+        site.service.ts                 (nuevo)
+        blog.service.ts                 (nuevo)
+        leads.service.ts                (nuevo)
+        stripe.service.ts               (nuevo)
+        payments.service.ts             (nuevo o expandir)
+      /types
+        models.ts                       (expandir)
+      /components
+        PublicNavbar.tsx                (nuevo)
+        PublicFooter.tsx                (nuevo)
+        Table.tsx / EmptyState.tsx      (si hace falta)
+        DevContinueButton.tsx           (expandir lista de pr+¶ximos pasos)
+    
+    ========================
+    REQUISITOS UX/UI
+    ========================
+    - Mant+Æn estilo consistente: cards, tablas, modales, badges, toasts.
+    - Mobile-first para la secci+¶n p+¶blica.
+    - Sidebar admin debe agregar los nuevos enlaces:
+      - Membres+°as
+      - Pagos
+      - Leads
+      - Sitio
+      - Blog
+      - Roles (placeholder)
+      - Reportes (placeholder)
+      - Notificaciones (placeholder)
+      - C+Ìmaras (placeholder)
+    
+    ========================
+    DATOS Y MODELOS
+    ========================
+    Agregar interfaces:
+    - SiteConfig { gymName, slogan, aboutText, phone, whatsapp, instagram, primaryColor, heroImageUrl, updatedAt }
+    - BlogPost { id, title, slug, excerpt, content, coverImageUrl?, published, createdAt, updatedAt }
+    - Lead { id, name, phone, email?, planSlug, preferredPaymentMethod, status: "NEW"|"CONTACTED"|"CONVERTED", createdAt }
+    - Payment { id, clientId?, leadId?, planId, amount, method: "CASH"|"CARD"|"TRANSFER"|"STRIPE", reference?, createdAt, status: "PAID"|"PENDING"|"FAILED" }
+    
+    ========================
+    ENTREGA
+    ========================
+    1) Genera o actualiza rutas en `routes.tsx` para incluir todas las nuevas p+Ìginas.
+    2) Crea/actualiza services y storage.
+    3) Actualiza el sidebar con nuevos items.
+    4) Entrega instrucciones de ejecuci+¶n al final.
+    5) Incluye datos demo iniciales (planes publicados + 2 posts + site config) en un `seed` al primer load si no existe.
+    
+    Ahora implementa todo.
+
+diff --git a/src/pages/admin/Payments.tsx b/src/pages/admin/Payments.tsx
+new file mode 100644
+index 0000000..80ee1fd
+--- /dev/null
++++ b/src/pages/admin/Payments.tsx
+@@ -0,0 +1,352 @@
++import { useState } from 'react';
++import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
++import { Badge } from '@/components/ui/badge';
++import { Button } from '@/components/ui/button';
++import { Input } from '@/components/ui/input';
++import { Label } from '@/components/ui/label';
++import {
++  Dialog,
++  DialogContent,
++  DialogDescription,
++  DialogFooter,
++  DialogHeader,
++  DialogTitle,
++} from '@/components/ui/dialog';
++import {
++  Table,
++  TableBody,
++  TableCell,
++  TableHead,
++  TableHeader,
++  TableRow,
++} from '@/components/ui/table';
++import {
++  Select,
++  SelectContent,
++  SelectItem,
++  SelectTrigger,
++  SelectValue,
++} from '@/components/ui/select';
++import { paymentsService } from '@/services/payments.service';
++import { clientsService } from '@/services/clients.service';
++import { membershipsService } from '@/services/memberships.service';
++import { formatCurrency, formatDate } from '@/utils/date';
++import { Plus, CreditCard, Money, Bank, Lightning, Warning } from '@phosphor-icons/react';
++import { toast } from 'sonner';
++
++export function Payments() {
++  const [payments, setPayments] = useState(paymentsService.getAllPayments());
++  const [isManualDialogOpen, setIsManualDialogOpen] = useState(false);
++  const [formData, setFormData] = useState({
++    clientId: '',
++    planId: '',
++    amount: '',
++    method: 'cash' as 'cash' | 'card' | 'transfer',
++    reference: '',
++  });
++
++  const clients = clientsService.getAll();
++  const plans = membershipsService.getPlans();
++
++  const handleCreateManualPayment = () => {
++    if (!formData.clientId || !formData.planId || !formData.amount) {
++      toast.error('Por favor completa todos los campos requeridos');
++      return;
++    }
++
++    paymentsService.createManualPayment({
++      clientId: formData.clientId,
++      planId: formData.planId,
++      amount: parseFloat(formData.amount),
++      method: formData.method,
++      reference: formData.reference || undefined,
++      status: 'paid',
++    });
++
++    setPayments(paymentsService.getAllPayments());
++    setIsManualDialogOpen(false);
++    setFormData({
++      clientId: '',
++      planId: '',
++      amount: '',
++      method: 'cash',
++      reference: '',
++    });
++    toast.success('Pago registrado exitosamente');
++  };
++
++  const getMethodIcon = (method: string) => {
++    switch (method) {
++      case 'cash': return <Money size={18} weight="fill" />;
++      case 'card': return <CreditCard size={18} />;
++      case 'transfer': return <Bank size={18} />;
++      case 'stripe': return <Lightning size={18} weight="fill" />;
++      default: return <Money size={18} />;
++    }
++  };
++
++  const getMethodLabel = (method: string) => {
++    const labels: Record<string, string> = {
++      cash: 'Efectivo',
++      card: 'Tarjeta',
++      transfer: 'Transferencia',
++      stripe: 'Stripe',
++    };
++    return labels[method] || method;
++  };
++
++  const getStatusBadge = (status: string) => {
++    const variants = {
++      paid: 'default',
++      pending: 'secondary',
++      failed: 'destructive',
++    } as const;
++
++    const labels = {
++      paid: 'Pagado',
++      pending: 'Pendiente',
++      failed: 'Fallido',
++    };
++
++    return (
++      <Badge variant={variants[status as keyof typeof variants]}>
++        {labels[status as keyof typeof labels]}
++      </Badge>
++    );
++  };
++
++  const totalRevenue = paymentsService.getTotalRevenue();
++  const paidPayments = payments.filter(p => p.status === 'paid');
++  const pendingPayments = payments.filter(p => p.status === 'pending');
++
++  return (
++    <div className="p-6 lg:p-8 space-y-6">
++      <div className="flex items-center justify-between">
++        <div>
++          <h1 className="text-3xl font-bold tracking-tight">Pagos</h1>
++          <p className="text-muted-foreground mt-1">
++            Gesti+¶n de pagos y transacciones
++          </p>
++        </div>
++        <Button onClick={() => setIsManualDialogOpen(true)} className="gap-2">
++          <Plus size={20} />
++          Registrar Pago Manual
++        </Button>
++      </div>
++
++      <div className="grid gap-4 md:grid-cols-4">
++        <Card>
++          <CardHeader className="pb-3">
++            <CardDescription>Ingresos Totales</CardDescription>
++            <CardTitle className="text-3xl text-green-600">
++              {formatCurrency(totalRevenue)}
++            </CardTitle>
++          </CardHeader>
++        </Card>
++        <Card>
++          <CardHeader className="pb-3">
++            <CardDescription>Pagos Completados</CardDescription>
++            <CardTitle className="text-3xl">{paidPayments.length}</CardTitle>
++          </CardHeader>
++        </Card>
++        <Card>
++          <CardHeader className="pb-3">
++            <CardDescription>Pendientes</CardDescription>
++            <CardTitle className="text-3xl text-yellow-600">
++              {pendingPayments.length}
++            </CardTitle>
++          </CardHeader>
++        </Card>
++        <Card>
++          <CardHeader className="pb-3">
++            <CardDescription>Este Mes</CardDescription>
++            <CardTitle className="text-3xl">
++              {payments.filter(p => {
++                const date = new Date(p.createdAt);
++                const now = new Date();
++                return date.getMonth() === now.getMonth() && 
++                       date.getFullYear() === now.getFullYear();
++              }).length}
++            </CardTitle>
++          </CardHeader>
++        </Card>
++      </div>
++
++      <Card className="bg-gradient-to-br from-blue-50 to-purple-50 border-blue-200">
++        <CardHeader>
++          <div className="flex items-start gap-3">
++            <Warning size={24} className="text-blue-600 mt-1" weight="fill" />
++            <div>
++              <CardTitle className="text-blue-900">Integraci+¶n Stripe (Demo)</CardTitle>
++              <CardDescription className="text-blue-700">
++                Esta es una simulaci+¶n de Stripe. Para implementaci+¶n real se requiere:
++                <ul className="list-disc list-inside mt-2 space-y-1">
++                  <li>Backend PHP/Node para crear sesiones de checkout</li>
++                  <li>Webhook endpoint para recibir confirmaciones</li>
++                  <li>Claves API de Stripe (public y secret key)</li>
++                </ul>
++                En producci+¶n, los pagos se procesan en /p/pago-demo?session=XXX
++              </CardDescription>
++            </div>
++          </div>
++        </CardHeader>
++      </Card>
++
++      <Card>
++        <CardHeader>
++          <CardTitle>Historial de Pagos</CardTitle>
++          <CardDescription>Todos los pagos registrados en el sistema</CardDescription>
++        </CardHeader>
++        <CardContent>
++          <Table>
++            <TableHeader>
++              <TableRow>
++                <TableHead>ID</TableHead>
++                <TableHead>Cliente</TableHead>
++                <TableHead>Plan</TableHead>
++                <TableHead>Monto</TableHead>
++                <TableHead>M+Ætodo</TableHead>
++                <TableHead>Estado</TableHead>
++                <TableHead>Referencia</TableHead>
++                <TableHead>Fecha</TableHead>
++              </TableRow>
++            </TableHeader>
++            <TableBody>
++              {payments.length === 0 ? (
++                <TableRow>
++                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
++                    No hay pagos registrados
++                  </TableCell>
++                </TableRow>
++              ) : (
++                payments.slice().reverse().map((payment) => {
++                  const client = payment.clientId ? clientsService.getById(payment.clientId) : null;
++                  const plan = membershipsService.getPlanById(payment.planId);
++                  
++                  return (
++                    <TableRow key={payment.id}>
++                      <TableCell className="font-mono text-xs">{payment.id}</TableCell>
++                      <TableCell className="font-medium">
++                        {client?.name || 'Lead'}
++                      </TableCell>
++                      <TableCell>{plan?.name || 'N/A'}</TableCell>
++                      <TableCell className="font-bold text-green-600">
++                        {formatCurrency(payment.amount)}
++                      </TableCell>
++                      <TableCell>
++                        <div className="flex items-center gap-2">
++                          {getMethodIcon(payment.method)}
++                          {getMethodLabel(payment.method)}
++                        </div>
++                      </TableCell>
++                      <TableCell>{getStatusBadge(payment.status)}</TableCell>
++                      <TableCell>
++                        {payment.reference ? (
++                          <code className="text-xs bg-muted px-2 py-1 rounded">
++                            {payment.reference}
++                          </code>
++                        ) : (
++                          <span className="text-muted-foreground">-</span>
++                        )}
++                      </TableCell>
++                      <TableCell>{formatDate(payment.createdAt)}</TableCell>
++                    </TableRow>
++                  );
++                })
++              )}
++            </TableBody>
++          </Table>
++        </CardContent>
++      </Card>
++
++      <Dialog open={isManualDialogOpen} onOpenChange={setIsManualDialogOpen}>
++        <DialogContent>
++          <DialogHeader>
++            <DialogTitle>Registrar Pago Manual</DialogTitle>
++            <DialogDescription>
++              Registra un pago recibido fuera del sistema
++            </DialogDescription>
++          </DialogHeader>
++
++          <div className="space-y-4">
++            <div className="space-y-2">
++              <Label htmlFor="client">Cliente *</Label>
++              <Select value={formData.clientId} onValueChange={(v) => setFormData({ ...formData, clientId: v })}>
++                <SelectTrigger id="client">
++                  <SelectValue placeholder="Selecciona un cliente" />
++                </SelectTrigger>
++                <SelectContent>
++                  {clients.map((client) => (
++                    <SelectItem key={client.id} value={client.id}>
++                      {client.name}
++                    </SelectItem>
++                  ))}
++                </SelectContent>
++              </Select>
++            </div>
++
++            <div className="space-y-2">
++              <Label htmlFor="plan">Plan *</Label>
++              <Select value={formData.planId} onValueChange={(v) => setFormData({ ...formData, planId: v })}>
++                <SelectTrigger id="plan">
++                  <SelectValue placeholder="Selecciona un plan" />
++                </SelectTrigger>
++                <SelectContent>
++                  {plans.map((plan) => (
++                    <SelectItem key={plan.id} value={plan.id}>
++                      {plan.name} - {formatCurrency(plan.price)}
++                    </SelectItem>
++                  ))}
++                </SelectContent>
++              </Select>
++            </div>
++
++            <div className="space-y-2">
++              <Label htmlFor="amount">Monto (Q) *</Label>
++              <Input
++                id="amount"
++                type="number"
++                value={formData.amount}
++                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
++                placeholder="250"
++              />
++            </div>
++
++            <div className="space-y-2">
++              <Label htmlFor="method">M+Ætodo de Pago *</Label>
++              <Select value={formData.method} onValueChange={(v: any) => setFormData({ ...formData, method: v })}>
++                <SelectTrigger id="method">
++                  <SelectValue />
++                </SelectTrigger>
++                <SelectContent>
++                  <SelectItem value="cash">Efectivo</SelectItem>
++                  <SelectItem value="card">Tarjeta</SelectItem>
++                  <SelectItem value="transfer">Transferencia</SelectItem>
++                </SelectContent>
++              </Select>
++            </div>
++
++            <div className="space-y-2">
++              <Label htmlFor="reference">Referencia (opcional)</Label>
++              <Input
++                id="reference"
++                value={formData.reference}
++                onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
++                placeholder="N-¶ de transacci+¶n, recibo, etc."
++              />
++            </div>
++          </div>
++
++          <DialogFooter>
++            <Button variant="outline" onClick={() => setIsManualDialogOpen(false)}>
++              Cancelar
++            </Button>
++            <Button onClick={handleCreateManualPayment}>
++              Registrar Pago
++            </Button>
++          </DialogFooter>
++        </DialogContent>
++      </Dialog>
++    </div>
++  );
++}

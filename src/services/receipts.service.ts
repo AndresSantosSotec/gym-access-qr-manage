@@ -23,7 +23,10 @@ export interface Receipt {
   details?: Record<string, any>;
   client?: {
     id: number;
-    name: string;
+    name?: string;
+    full_name?: string;
+    first_name?: string;
+    last_name?: string;
     email: string;
     phone: string;
   };
@@ -167,6 +170,49 @@ export const receiptsService = {
    */
   async previewInvoice(receiptId: number): Promise<string> {
     const response = await api.get(`/receipts/${receiptId}/preview/invoice`);
+    return response.data;
+  },
+
+  /**
+   * Descargar ticket térmico 80mm como PDF
+   */
+  async downloadTicketPdf(receiptId: number): Promise<Blob> {
+    const response = await api.get(`/receipts/${receiptId}/download/ticket`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  /**
+   * Obtener HTML del ticket para impresión directa
+   */
+  async previewTicket(receiptId: number): Promise<string> {
+    const response = await api.get(`/receipts/${receiptId}/preview/ticket`);
+    return response.data;
+  },
+
+  /**
+   * Descargar reporte general de recibos en PDF
+   */
+  async downloadReportPdf(filters?: {
+    date_from?: string;
+    date_to?: string;
+    status?: string;
+    payment_type?: string;
+    payment_method?: string;
+    is_invoiced?: boolean;
+  }): Promise<Blob> {
+    const params = new URLSearchParams();
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.payment_type) params.append('payment_type', filters.payment_type);
+    if (filters?.payment_method) params.append('payment_method', filters.payment_method);
+    if (filters?.is_invoiced !== undefined) params.append('is_invoiced', String(filters.is_invoiced));
+
+    const response = await api.get(`/receipts/report/pdf?${params.toString()}`, {
+      responseType: 'blob',
+    });
     return response.data;
   },
 

@@ -16,7 +16,7 @@ import { membershipsService } from '@/services/memberships.service';
 import { paymentsService } from '@/services/payments.service';
 import { cashService } from '@/services/cash.service';
 import type { MembershipPlan } from '@/types/models';
-import { Check, Camera, Upload, X, Fingerprint, CreditCard } from '@phosphor-icons/react';
+import { Check, Camera, Upload, X, Fingerprint, CreditCard, MagnifyingGlass } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -37,6 +37,7 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [dpi, setDpi] = useState('');
+  const [nit, setNit] = useState('');
   const [notes, setNotes] = useState('');
 
   const [profilePhoto, setProfilePhoto] = useState<string>('');
@@ -56,7 +57,14 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
 
+  const [inscriptionFee, setInscriptionFee] = useState<number>(0);
+  const [planSearch, setPlanSearch] = useState('');
+
   const activePlans = plans.filter(p => p.published);
+  const filteredPlans = activePlans.filter(p =>
+    !planSearch || p.name.toLowerCase().includes(planSearch.toLowerCase()) ||
+    p.description?.toLowerCase().includes(planSearch.toLowerCase())
+  );
   const selectedPlan = activePlans.find(p => p.id === selectedPlanId);
 
   const endDate = selectedPlan ? calculateEndDate(startDate, selectedPlan.durationDays) : '';
@@ -88,6 +96,7 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
     setPhone('');
     setEmail('');
     setDpi('');
+    setNit('');
     setNotes('');
     setProfilePhoto('');
     setFingerprintId('');
@@ -100,6 +109,8 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
     setCardHolder('');
     setCardExpiry('');
     setCardCvv('');
+    setInscriptionFee(0);
+    setPlanSearch('');
   };
 
   const handleClose = () => {
@@ -176,19 +187,25 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
   };
 
   const handleFinish = async (finalPaymentMethod?: typeof paymentMethod) => {
+    // Validate required fields
+    if (!name || !name.trim()) {
+      toast.error('Por favor ingresa el nombre del cliente');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       const newClient = await clientsService.create({
-        name,
-        phone,
-        email,
-        dpi,
-        notes,
-        status: 'INACTIVE',
+        name: name.trim(),
+        phone: phone.trim() || null,
+        email: email.trim() || null,
+        dpi: dpi.trim() || null,
+        nit: nit.trim() || null,
+        notes: notes.trim() || null,
         profilePhoto,
-        // fingerprint info is sent separately or if backend supported it
-        // We will send it after creation
+        // NOTE: status is set automatically by backend to 'active'
+        // DO NOT send status field to avoid validation errors
       });
 
       if (fingerprintBase64) {
@@ -206,28 +223,52 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
         const hasPaid = method !== 'STRIPE';
 
         try {
+          const totalAmountPaid = selectedPlan.price + inscriptionFee;
+          console.log('[Wizard] Assigning membership:', {
+            clientId: newClient.id,
+            planId: selectedPlanId,
+            method,
+            totalAmountPaid,
+            inscriptionFee,
+          });
+
           const result = await membershipsService.assignMembership(
             newClient.id,
             selectedPlanId,
             method,
-            selectedPlan.price
+            totalAmountPaid,
+            undefined, // reference
+            'single', // paymentType
+            1, // numInstallments
+            undefined, // initialPayment
+            inscriptionFee > 0 ? inscriptionFee : undefined // inscriptionFee
           );
 
-          if (hasPaid) {
-            cashService.createMovement({
-              type: 'IN',
-              amount: selectedPlan.price,
-              category: 'Membresía',
-              description: `Pago de membresía: ${selectedPlan.name} - ${newClient.name}`,
-              reference: result.membership?.id?.toString() || '',
-            });
+          console.log('[Wizard] Membership assigned successfully:', result);
 
-            toast.success(`Cliente creado con membresía activa`);
+          if (hasPaid) {
+            try {
+              cashService.createMovement({
+                type: 'IN',
+                amount: totalAmountPaid,
+                category: 'Membresía',
+                description: `Pago de membresía: ${selectedPlan.name} - ${newClient.name}`,
+                reference: result.membership?.id?.toString() || '',
+              });
+            } catch (cashErr) {
+              console.warn('[Wizard] Cash movement failed (non-critical):', cashErr);
+            }
+
+            toast.success(`Cliente creado con membresía "${selectedPlan.name}" activa`);
           } else {
             toast.success(`Cliente creado. Membresía pendiente de pago.`);
           }
         } catch (err: any) {
-          toast.error(err.response?.data?.message || 'Error al asignar membresía');
+          console.error('[Wizard] Error assigning membership:', err.response?.data || err);
+          const errorDetail = err.response?.data?.errors
+            ? Object.values(err.response.data.errors).flat().join(', ')
+            : err.response?.data?.message || 'Error desconocido al asignar membresía';
+          toast.error(`Error al asignar membresía: ${errorDetail}`);
         }
       } else {
         toast.success('Cliente creado sin membresía');
@@ -236,9 +277,11 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
       handleReset();
       onSuccess();
       onClose();
-    } catch (error) {
-      console.error(error);
-      toast.error('Error al crear cliente');
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || 'Error al crear cliente';
+      const errors = error.response?.data?.errors;
+      console.error("Backend validation error:", errors || errorMsg);
+      toast.error(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -321,6 +364,16 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
                       value={dpi}
                       onChange={(e) => setDpi(e.target.value)}
                       placeholder="Ej: 1234567890101"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="nit">NIT <span className="text-muted-foreground text-xs">(Facturación)</span></Label>
+                    <Input
+                      id="nit"
+                      value={nit}
+                      onChange={(e) => setNit(e.target.value)}
+                      placeholder="Ej: 123456-7"
                     />
                   </div>
 
@@ -485,7 +538,7 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
               <div className="space-y-4">
                 <h3 className="font-bold text-lg">Paso 3: Plan de Membresía</h3>
                 <p className="text-sm text-muted-foreground">
-                  Opcional: Selecciona un plan o déjalo vacío para asignar después
+                  Selecciona un plan de membresía para el cliente
                 </p>
 
                 {activePlans.length === 0 ? (
@@ -495,36 +548,82 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
                     </CardContent>
                   </Card>
                 ) : (
-                  <div className="grid gap-3">
-                    {activePlans.map((plan) => (
-                      <Card
-                        key={plan.id}
-                        className={cn(
-                          'cursor-pointer transition-all',
-                          selectedPlanId === plan.id
-                            ? 'border-primary bg-primary/5'
-                            : 'hover:border-primary/50'
-                        )}
-                        onClick={() => setSelectedPlanId(plan.id)}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h4 className="font-bold">{plan.name}</h4>
-                              <p className="text-sm text-muted-foreground">{plan.description}</p>
-                              <div className="flex gap-2 mt-2">
-                                <Badge variant="secondary">${plan.price}</Badge>
-                                <Badge variant="outline">{plan.durationDays} días</Badge>
-                              </div>
-                            </div>
-                            {selectedPlanId === plan.id && (
-                              <Check size={24} className="text-primary" weight="bold" />
-                            )}
-                          </div>
+                  <>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
+                        <Input
+                          placeholder="Buscar plan por nombre..."
+                          value={planSearch}
+                          onChange={(e) => setPlanSearch(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                      {selectedPlanId && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedPlanId('')}
+                          className="shrink-0"
+                        >
+                          <X size={14} className="mr-1" />
+                          Quitar plan
+                        </Button>
+                      )}
+                    </div>
+
+                    {!selectedPlanId && (
+                      <Card className="bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-800">
+                        <CardContent className="p-3">
+                          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                            ⚠️ No has seleccionado un plan. El cliente se creará <strong>sin membresía activa</strong>.
+                          </p>
                         </CardContent>
                       </Card>
-                    ))}
-                  </div>
+                    )}
+
+                    <div className="grid gap-3 max-h-[300px] overflow-y-auto pr-1">
+                      {filteredPlans.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-4">
+                          No se encontraron planes para "{planSearch}"
+                        </p>
+                      ) : (
+                        filteredPlans.map((plan) => (
+                          <Card
+                            key={plan.id}
+                            className={cn(
+                              'cursor-pointer transition-all',
+                              selectedPlanId === plan.id
+                                ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                : 'hover:border-primary/50'
+                            )}
+                            onClick={() => setSelectedPlanId(plan.id)}
+                          >
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <h4 className="font-bold">{plan.name}</h4>
+                                  <p className="text-sm text-muted-foreground">{plan.description}</p>
+                                  <div className="flex gap-2 mt-2">
+                                    <Badge variant="secondary">Q{plan.price}</Badge>
+                                    <Badge variant="outline">{plan.durationDays} días</Badge>
+                                  </div>
+                                </div>
+                                {selectedPlanId === plan.id && (
+                                  <Check size={24} className="text-primary" weight="bold" />
+                                )}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))
+                      )}
+                    </div>
+
+                    <p className="text-xs text-muted-foreground text-right">
+                      {activePlans.length} plan{activePlans.length !== 1 ? 'es' : ''} disponible{activePlans.length !== 1 ? 's' : ''}
+                    </p>
+                  </>
                 )}
 
                 {selectedPlanId && (
@@ -570,23 +669,56 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
                 <h3 className="font-bold text-lg">Paso 4: Pago</h3>
 
                 {!selectedPlanId ? (
-                  <Card>
-                    <CardContent className="p-6 text-center text-muted-foreground">
-                      No se seleccionó ningún plan. El cliente se creará sin membresía.
+                  <Card className="border-yellow-300 bg-yellow-50 dark:bg-yellow-950">
+                    <CardContent className="p-6 text-center">
+                      <p className="text-yellow-800 dark:text-yellow-200 font-medium">⚠️ No se seleccionó ningún plan</p>
+                      <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">El cliente se creará sin membresía activa.</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3"
+                        onClick={() => setStep(3)}
+                      >
+                        Volver a seleccionar plan
+                      </Button>
                     </CardContent>
                   </Card>
                 ) : (
                   <>
                     <Card>
-                      <CardContent className="p-4">
+                      <CardContent className="p-4 space-y-4">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm text-muted-foreground">Plan seleccionado</p>
+                            <p className="text-sm font-medium">Plan seleccionado</p>
                             <p className="font-bold text-lg">{selectedPlan?.name}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm text-muted-foreground">Total</p>
-                            <p className="font-bold text-2xl">${selectedPlan?.price}</p>
+                            <p className="text-sm text-muted-foreground">Valor del Plan</p>
+                            <p className="font-semibold text-xl">Q{selectedPlan?.price}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                          <Label htmlFor="inscriptionFee" className="min-w-fit">Cuota de Inscripción</Label>
+                          <div className="relative w-full max-w-[200px]">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">Q</span>
+                            <Input
+                              id="inscriptionFee"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              className="pl-8"
+                              value={inscriptionFee || ''}
+                              onChange={(e) => setInscriptionFee(Number(e.target.value))}
+                              placeholder="0.00"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="pt-4 border-t flex items-center justify-between">
+                          <div className="text-right flex-1">
+                            <p className="text-sm text-muted-foreground uppercase tracking-wider font-semibold">Total a Pagar Hoy</p>
+                            <p className="font-bold text-3xl text-primary">Q{(selectedPlan?.price || 0) + (inscriptionFee || 0)}</p>
                           </div>
                         </div>
                       </CardContent>

@@ -24,6 +24,9 @@ const mapClientFromBackend = (data: any): Client => {
     phone: data.phone || '',
     email: data.email,
     dpi: data.dni,
+    nit: data.nit,
+    companyName: data.company_name,
+    fiscalAddress: data.fiscal_address,
     notes: data.notes,
     status: (data.status || 'inactive').toUpperCase() as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
     membershipEnd: data.membership_end_date,
@@ -64,26 +67,45 @@ export const clientsService = {
   },
 
   create: async (clientData: any): Promise<Client> => {
-    // Map frontend fields to backend fields
+    // Map frontend fields to backend fields - ONLY include fields the backend expects
+    const nameParts = clientData.name ? clientData.name.trim().split(/\s+/) : [];
+    const firstName = nameParts[0] || 'Unknown';
+    const lastName = nameParts.slice(1).join(' ') || 'User';
+
+    // Use explicit firstName/lastName if provided
     const payload = {
-      first_name: clientData.name?.split(' ')[0] || 'Unknown', // Simple split fallback
-      last_name: clientData.name?.split(' ').slice(1).join(' ') || 'User',
-      phone: clientData.phone,
-      email: clientData.email,
-      dni: clientData.dpi,
-      notes: clientData.notes,
-      // Add other fields as necessary
-      ...clientData
+      first_name: clientData.firstName || firstName,
+      last_name: clientData.lastName || lastName,
+      phone: clientData.phone || null,
+      email: clientData.email || null,
+      dni: clientData.dpi || null,
+      nit: clientData.nit || null,
+      company_name: clientData.companyName || null,
+      fiscal_address: clientData.fiscalAddress || null,
+      notes: clientData.notes || null,
+      // Only include optional fields that backend accepts
+      ...(clientData.birthDate && { birth_date: clientData.birthDate }),
+      ...(clientData.gender && { gender: clientData.gender }),
+      ...(clientData.address && { address: clientData.address }),
+      ...(clientData.emergencyContactName && { emergency_contact_name: clientData.emergencyContactName }),
+      ...(clientData.emergencyContactPhone && { emergency_contact_phone: clientData.emergencyContactPhone }),
+      // DO NOT include: status, profilePhoto, fingerprintId - these are handled separately
     };
 
-    // If name wasn't pre-split, try to be smarter or expect first_name/last_name from form
-    if (clientData.firstName && clientData.lastName) {
-      payload.first_name = clientData.firstName;
-      payload.last_name = clientData.lastName;
+    const response = await api.post('/clients', payload);
+    const newClient = mapClientFromBackend(response.data);
+
+    // Upload photo separately if provided
+    if (clientData.profilePhoto && clientData.profilePhoto.startsWith('data:')) {
+      try {
+        await clientsService.uploadPhoto(newClient.id, clientData.profilePhoto);
+      } catch (photoError) {
+        console.error('Error uploading photo:', photoError);
+        // Don't fail the entire operation if photo upload fails
+      }
     }
 
-    const response = await api.post('/clients', payload);
-    return mapClientFromBackend(response.data);
+    return newClient;
   },
 
   update: async (id: string, updates: Partial<Client> & any): Promise<Client | null> => {
@@ -96,6 +118,9 @@ export const clientsService = {
       payload.last_name = parts.slice(1).join(' ');
     }
     if (updates.dpi) payload.dni = updates.dpi;
+    if (updates.nit) payload.nit = updates.nit;
+    if (updates.companyName) payload.company_name = updates.companyName;
+    if (updates.fiscalAddress) payload.fiscal_address = updates.fiscalAddress;
     if (updates.profilePhoto && updates.profilePhoto.startsWith('data:')) {
       // Prepare for file upload separately or handle base64 if backend supports it
       // The current ClientController.uploadPhoto expects a file 'photo'
@@ -139,6 +164,24 @@ export const clientsService = {
   generateQR: (clientId: string): string => {
     // Backend generates the actual QR content, but this might be for display URL
     return `QR-CLIENT-${clientId}`;
+  },
+
+  uploadPhoto: async (clientId: string, base64Data: string): Promise<any> => {
+    try {
+      // Convert base64 to blob
+      const response = await fetch(base64Data);
+      const blob = await response.blob();
+      const formData = new FormData();
+      formData.append('photo', blob, 'profile.jpg');
+
+      const result = await api.post(`/clients/${clientId}/upload-photo`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      return result.data;
+    } catch (error) {
+      console.error('Error uploading photo:', error);
+      throw error;
+    }
   },
 
   // ─── Fingerprint Methods ───

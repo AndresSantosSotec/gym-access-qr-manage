@@ -44,6 +44,11 @@ import {
   XCircle,
   MagnifyingGlass,
   CurrencyDollar,
+  WhatsappLogo,
+  ArrowsClockwise,
+  Receipt as ReceiptIcon,
+  CalendarBlank,
+  Export,
 } from '@phosphor-icons/react';
 import { receiptsService, type Receipt } from '@/services/receipts.service';
 import { toast } from 'sonner';
@@ -75,6 +80,15 @@ export function ReceiptsPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
   const [emailData, setEmailData] = useState({ email: '', message: '' });
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportFilters, setReportFilters] = useState({
+    date_from: '',
+    date_to: '',
+    status: '',
+    payment_type: '',
+    payment_method: '',
+  });
+  const [reportLoading, setReportLoading] = useState(false);
   const [stats, setStats] = useState({
     total: 0,
     paid: 0,
@@ -95,17 +109,17 @@ export function ReceiptsPage() {
         payment_type: filters.paymentType === 'all' ? undefined : filters.paymentType || undefined,
         is_invoiced: filters.isInvoiced === 'all' ? undefined : (filters.isInvoiced === 'true'),
       });
-      
+
       let filtered = response.data;
       if (filters.search) {
         const search = filters.search.toLowerCase();
         filtered = filtered.filter(r =>
           r.receipt_number.toLowerCase().includes(search) ||
           r.invoice_number?.toLowerCase().includes(search) ||
-          r.client?.name.toLowerCase().includes(search)
+          (r.client?.full_name || r.client?.name || '').toLowerCase().includes(search)
         );
       }
-      
+
       setReceipts(filtered);
     } catch (error) {
       toast.error('Error cargando recibos');
@@ -185,10 +199,118 @@ export function ReceiptsPage() {
     }
   };
 
+  const handlePrintTicket = async (receipt: Receipt) => {
+    try {
+      const html = await receiptsService.previewTicket(receipt.id);
+      const printWindow = window.open('', '', 'width=350,height=600');
+      if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+        setTimeout(() => {
+          printWindow.print();
+        }, 300);
+      }
+      toast.success('Ticket listo para imprimir');
+    } catch (error) {
+      toast.error('Error generando ticket');
+    }
+  };
+
+  const handleDownloadTicket = async (receipt: Receipt) => {
+    try {
+      const blob = await receiptsService.downloadTicketPdf(receipt.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Ticket_${receipt.receipt_number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Ticket descargado');
+    } catch (error) {
+      toast.error('Error descargando ticket');
+    }
+  };
+
+  const handleDownloadReport = async () => {
+    try {
+      setReportLoading(true);
+      const blob = await receiptsService.downloadReportPdf({
+        date_from: reportFilters.date_from || undefined,
+        date_to: reportFilters.date_to || undefined,
+        status: reportFilters.status || undefined,
+        payment_type: reportFilters.payment_type || undefined,
+        payment_method: reportFilters.payment_method || undefined,
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Reporte_Recibos_${new Date().toISOString().slice(0, 10)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Reporte descargado');
+      setReportOpen(false);
+    } catch (error) {
+      toast.error('Error generando reporte');
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
   const handleSendEmail = async (receipt: Receipt) => {
     setSelectedReceipt(receipt);
     setEmailData({ email: receipt.client?.email || '', message: '' });
     setEmailOpen(true);
+  };
+
+  const handleShareWhatsApp = async (receipt: Receipt) => {
+    // First download the PDF so the user has it
+    try {
+      const blob = await receiptsService.downloadReceiptPdf(receipt.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${receipt.receipt_number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.warn('Error descargando PDF para WhatsApp:', error);
+    }
+
+    // Build WhatsApp message
+    const clientName = receipt.client?.full_name || receipt.client?.name || 'Cliente';
+    const phone = receipt.client?.phone?.replace(/\D/g, '') || '';
+    const total = `Q${Number(receipt.total || 0).toFixed(2)}`;
+    const date = new Date(receipt.created_at).toLocaleDateString('es-GT');
+    const typeLabel = receipt.payment_type === 'subscription' ? 'Membresía' :
+      receipt.payment_type === 'individual_payment' ? 'Pago' :
+        receipt.payment_type === 'course' ? 'Curso' :
+          receipt.payment_type === 'product' ? 'Venta/POS' : 'Otro';
+
+    const message = encodeURIComponent(
+      `\u{1F3CB} *GymFlow - Comprobante de Pago*\n\n` +
+      `\u{1F4C4} Recibo: *${receipt.receipt_number}*\n` +
+      `\u{1F464} Cliente: *${clientName}*\n` +
+      `\u{1F4B0} Total: *${total}*\n` +
+      `\u{1F4CB} Tipo: ${typeLabel}\n` +
+      `\u{1F4C5} Fecha: ${date}\n` +
+      `\u{2705} Estado: ${receipt.status === 'paid' ? 'Pagado' : 'Pendiente'}\n\n` +
+      `El PDF del recibo se descargó automáticamente. Puedes adjuntarlo a este chat.\n\n` +
+      `_Gracias por tu preferencia._`
+    );
+
+    // Open WhatsApp with pre-filled message (use phone if available)
+    const waUrl = phone
+      ? `https://wa.me/${phone.startsWith('502') ? phone : '502' + phone}?text=${message}`
+      : `https://web.whatsapp.com/send?text=${message}`;
+
+    window.open(waUrl, '_blank');
+    toast.success('PDF descargado. WhatsApp abierto para enviar.');
   };
 
   const submitEmail = async () => {
@@ -325,7 +447,7 @@ export function ReceiptsPage() {
                   <SelectItem value="subscription">Membresía</SelectItem>
                   <SelectItem value="individual_payment">Pago Individual</SelectItem>
                   <SelectItem value="course">Curso</SelectItem>
-                  <SelectItem value="product">Producto</SelectItem>
+                  <SelectItem value="product">Venta/POS</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -357,10 +479,16 @@ export function ReceiptsPage() {
                 {loading ? 'Cargando...' : `${receipts.length} recibos encontrados`}
               </CardDescription>
             </div>
-            <Button size="sm">
-              <FundsIn className="w-4 h-4 mr-2" />
-              Generar Reporte
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => { loadReceipts(); loadStats(); }}>
+                <ArrowsClockwise className="w-4 h-4 mr-2" />
+                Actualizar
+              </Button>
+              <Button size="sm" onClick={() => setReportOpen(true)}>
+                <Export className="w-4 h-4 mr-2" />
+                Exportar Reporte
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -397,13 +525,15 @@ export function ReceiptsPage() {
                       <TableCell className="font-mono text-sm font-semibold">
                         {receipt.receipt_number}
                       </TableCell>
-                      <TableCell>{receipt.client?.name || '-'}</TableCell>
+                      <TableCell>{receipt.client?.full_name || receipt.client?.name || '-'}</TableCell>
                       <TableCell className="text-right font-bold">
-                        Q{receipt.total.toFixed(2)}
+                        Q{Number(receipt.total || 0).toFixed(2)}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="capitalize text-xs">
-                          {receipt.type}
+                          {receipt.payment_type === 'subscription' ? 'Membresía' :
+                            receipt.payment_type === 'individual_payment' ? 'Pago' :
+                              receipt.payment_type === 'product' ? 'Venta/POS' : receipt.type}
                         </Badge>
                       </TableCell>
                       <TableCell>{getStatusBadge(receipt.status)}</TableCell>
@@ -459,6 +589,23 @@ export function ReceiptsPage() {
                               <EnvelopeOpen className="w-4 h-4 mr-2" />
                               Enviar por Email
                             </DropdownMenuItem>
+
+                            <DropdownMenuItem onClick={() => handleShareWhatsApp(receipt)}>
+                              <WhatsappLogo className="w-4 h-4 mr-2" />
+                              Enviar por WhatsApp
+                            </DropdownMenuItem>
+
+                            <DropdownMenuSeparator />
+
+                            <DropdownMenuItem onClick={() => handlePrintTicket(receipt)}>
+                              <ReceiptIcon className="w-4 h-4 mr-2" />
+                              Imprimir Ticket 80mm
+                            </DropdownMenuItem>
+
+                            <DropdownMenuItem onClick={() => handleDownloadTicket(receipt)}>
+                              <Printer className="w-4 h-4 mr-2" />
+                              Descargar Ticket PDF
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -476,7 +623,7 @@ export function ReceiptsPage() {
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-auto">
           <DialogHeader>
             <DialogTitle>
-              {selectedReceipt ? `${selectedReceipt.receipt_number} - ${selectedReceipt.client?.name}` : 'Vista Previa'}
+              {selectedReceipt ? `${selectedReceipt.receipt_number} - ${selectedReceipt.client?.full_name || selectedReceipt.client?.name}` : 'Vista Previa'}
             </DialogTitle>
           </DialogHeader>
 
@@ -507,7 +654,7 @@ export function ReceiptsPage() {
           <DialogHeader>
             <DialogTitle>Enviar Recibo por Email</DialogTitle>
             <DialogDescription>
-              {selectedReceipt?.receipt_number} - {selectedReceipt?.client?.name}
+              {selectedReceipt?.receipt_number} - {selectedReceipt?.client?.full_name || selectedReceipt?.client?.name}
             </DialogDescription>
           </DialogHeader>
 
@@ -540,6 +687,122 @@ export function ReceiptsPage() {
               <Button onClick={submitEmail}>
                 <EnvelopeOpen className="w-4 h-4 mr-2" />
                 Enviar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Report Dialog */}
+      <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Export className="w-5 h-5" />
+              Exportar Reporte de Recibos
+            </DialogTitle>
+            <DialogDescription>
+              Selecciona los filtros para generar el reporte en PDF (A4 horizontal).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Fecha Desde</label>
+                <Input
+                  type="date"
+                  value={reportFilters.date_from}
+                  onChange={(e) => setReportFilters({ ...reportFilters, date_from: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Fecha Hasta</label>
+                <Input
+                  type="date"
+                  value={reportFilters.date_to}
+                  onChange={(e) => setReportFilters({ ...reportFilters, date_to: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Estado</label>
+                <Select
+                  value={reportFilters.status || 'all'}
+                  onValueChange={(v) => setReportFilters({ ...reportFilters, status: v === 'all' ? '' : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="paid">Pagado</SelectItem>
+                    <SelectItem value="pending">Pendiente</SelectItem>
+                    <SelectItem value="cancelled">Cancelado</SelectItem>
+                    <SelectItem value="draft">Borrador</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Tipo de Pago</label>
+                <Select
+                  value={reportFilters.payment_type || 'all'}
+                  onValueChange={(v) => setReportFilters({ ...reportFilters, payment_type: v === 'all' ? '' : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="subscription">Membresía</SelectItem>
+                    <SelectItem value="individual_payment">Pago Individual</SelectItem>
+                    <SelectItem value="course">Curso</SelectItem>
+                    <SelectItem value="product">Producto</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Método de Pago</label>
+              <Select
+                value={reportFilters.payment_method || 'all'}
+                onValueChange={(v) => setReportFilters({ ...reportFilters, payment_method: v === 'all' ? '' : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="cash">Efectivo</SelectItem>
+                  <SelectItem value="card">Tarjeta</SelectItem>
+                  <SelectItem value="transfer">Transferencia</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setReportFilters({ date_from: '', date_to: '', status: '', payment_type: '', payment_method: '' })}
+            >
+              Limpiar Filtros
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setReportOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleDownloadReport} disabled={reportLoading}>
+                {reportLoading ? (
+                  <ArrowsClockwise className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4 mr-2" />
+                )}
+                {reportLoading ? 'Generando...' : 'Descargar PDF'}
               </Button>
             </div>
           </div>

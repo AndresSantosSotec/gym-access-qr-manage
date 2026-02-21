@@ -91,6 +91,9 @@ export function ClientDetail() {
     phone: '',
     email: '',
     dpi: '',
+    nit: '',
+    companyName: '',
+    fiscalAddress: '',
     notes: '',
     status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
   });
@@ -146,6 +149,9 @@ export function ClientDetail() {
           phone: foundClient.phone,
           email: foundClient.email || '',
           dpi: foundClient.dpi || '',
+          nit: foundClient.nit || '',
+          companyName: foundClient.companyName || '',
+          fiscalAddress: foundClient.fiscalAddress || '',
           notes: foundClient.notes || '',
           status: foundClient.status,
         });
@@ -941,6 +947,31 @@ export function ClientDetail() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="edit-nit">NIT</Label>
+              <Input
+                id="edit-nit"
+                value={editForm.nit}
+                onChange={(e) => setEditForm({ ...editForm, nit: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-company-name">Razón Social</Label>
+              <Input
+                id="edit-company-name"
+                value={editForm.companyName}
+                onChange={(e) => setEditForm({ ...editForm, companyName: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-fiscal-address">Dirección Fiscal</Label>
+              <Textarea
+                id="edit-fiscal-address"
+                value={editForm.fiscalAddress}
+                onChange={(e) => setEditForm({ ...editForm, fiscalAddress: e.target.value })}
+                rows={2}
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="edit-status">Estado</Label>
               <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v as any })}>
                 <SelectTrigger id="edit-status">
@@ -1088,17 +1119,24 @@ export function ClientDetail() {
                 {selectedPlanId && (() => {
                   const plan = plans.find(p => p.id === selectedPlanId);
                   if (!plan) return null;
-                  const enganche = parseFloat(initialPayment) || 0;
-                  const remaining = plan.price - enganche;
-                  const cuotaMonto = remaining / parseInt(numInstallments);
+                  const cuotaMonto = plan.price;
+                  const total = cuotaMonto * parseInt(numInstallments);
                   return (
                     <div className="rounded-lg border bg-muted/50 p-3 space-y-1">
                       <p className="text-sm font-semibold">Vista Previa del Plan</p>
-                      <div className="text-xs space-y-0.5">
-                        <p>Total: <span className="font-bold">{formatCurrency(plan.price)}</span></p>
-                        {enganche > 0 && <p>Enganche: <span className="font-bold text-green-600">{formatCurrency(enganche)}</span></p>}
-                        <p>Saldo a fraccionar: <span className="font-bold">{formatCurrency(Math.max(0, remaining))}</span></p>
-                        <p>{numInstallments} cuotas de: <span className="font-bold text-blue-600">{formatCurrency(Math.max(0, cuotaMonto))}</span></p>
+                      <div className="text-xs space-y-1">
+                        <div className="flex justify-between">
+                          <span>Monto por cuota:</span>
+                          <span className="font-bold text-blue-600">{formatCurrency(cuotaMonto)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Cantidad de cuotas:</span>
+                          <span className="font-bold">{numInstallments}</span>
+                        </div>
+                        <div className="flex justify-between pt-1 border-t">
+                          <span>Total del plan:</span>
+                          <span className="font-bold text-lg">{formatCurrency(total)}</span>
+                        </div>
                       </div>
                     </div>
                   );

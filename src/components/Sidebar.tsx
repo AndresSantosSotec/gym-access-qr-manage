@@ -52,14 +52,11 @@ const menuItems: MenuItem[] = [
   { to: '/admin/ventas', icon: ShoppingCart, label: 'Ventas y POS', permission: 'SALES_VIEW' },
   { to: '/admin/site', icon: Globe, label: 'Sitio Web', permission: 'SETTINGS_VIEW' },
   { to: '/admin/blog', icon: Article, label: 'Blog', permission: 'SETTINGS_VIEW' },
-  { to: '/admin/settings', icon: Gear, label: 'Configuración' },
 ];
 
 const plannedItems: MenuItem[] = [
   { to: '/admin/roles', icon: UserCircleGear, label: 'Roles', permission: 'ROLES_MANAGE' },
   { to: '/admin/reports', icon: ChartLine, label: 'Reportes' },
-  { to: '/admin/notifications', icon: Bell, label: 'Notificaciones' },
-  { to: '/admin/cameras', icon: Camera, label: 'Cámaras' },
 ];
 
 export function Sidebar({ className }: SidebarProps) {

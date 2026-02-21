@@ -4,6 +4,9 @@ export interface Client {
   phone: string;
   email?: string;
   dpi?: string;
+  nit?: string;
+  companyName?: string;
+  fiscalAddress?: string;
   photo?: string;
   notes?: string;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
@@ -90,11 +93,16 @@ export interface Payment {
 export interface Lead {
   id: string;
   name: string;
+  firstName: string;
+  lastName: string;
   phone: string;
   email?: string;
   planSlug: string;
   preferredPaymentMethod: string;
-  status: 'NEW' | 'CONTACTED' | 'CONVERTED';
+  status: 'new' | 'contacted' | 'interested' | 'not_interested' | 'converted';
+  source?: string;
+  notes?: string;
+  contactedAt?: string;
   createdAt: string;
 }
 
@@ -420,6 +428,7 @@ export interface Venta {
   estado: 'PAGADA' | 'PENDIENTE' | 'COTIZACION';
   detalles?: VentaDetalle[];
   pagos?: PagoVenta[];
+  receipt?: { id: number; receipt_number: string; status: string } | null;
   created_at: string;
 }
 

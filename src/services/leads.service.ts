@@ -1,76 +1,185 @@
-import { storage, STORAGE_KEYS } from '@/utils/storage';
+import { api } from './api.service';
 import type { Lead } from '@/types/models';
-import { clientsService } from './clients.service';
+
+/**
+ * Maps a backend lead record to the frontend Lead type
+ */
+const mapLeadFromBackend = (data: any): Lead => ({
+  id: data.id.toString(),
+  name: `${data.first_name || ''} ${data.last_name || ''}`.trim(),
+  firstName: data.first_name || '',
+  lastName: data.last_name || '',
+  phone: data.phone || '',
+  email: data.email || undefined,
+  planSlug: data.plan_slug || '',
+  preferredPaymentMethod: data.preferred_payment_method || 'cash',
+  status: data.status || 'new',
+  source: data.source || undefined,
+  notes: data.notes || undefined,
+  contactedAt: data.contacted_at || undefined,
+  createdAt: data.created_at || new Date().toISOString(),
+});
 
 export const leadsService = {
-  getAllLeads: (): Lead[] => {
-    return storage.get<Lead[]>(STORAGE_KEYS.LEADS) || [];
+  /**
+   * Get all leads from the API (admin, requires auth)
+   */
+  getAllLeads: async (params?: {
+    status?: string;
+    search?: string;
+    per_page?: number;
+  }): Promise<Lead[]> => {
+    try {
+      const response = await api.get('/leads', {
+        params: {
+          ...params,
+          per_page: params?.per_page || 100,
+        },
+      });
+      const items = response.data.data || [];
+      return items.map(mapLeadFromBackend);
+    } catch (error) {
+      console.error('Error fetching leads:', error);
+      return [];
+    }
   },
 
-  getLeadById: (id: string): Lead | null => {
-    const leads = leadsService.getAllLeads();
-    return leads.find((l) => l.id === id) || null;
+  /**
+   * Get lead by ID
+   */
+  getLeadById: async (id: string): Promise<Lead | null> => {
+    try {
+      const response = await api.get(`/leads/${id}`);
+      return mapLeadFromBackend(response.data);
+    } catch (error) {
+      console.error(`Error fetching lead ${id}:`, error);
+      return null;
+    }
   },
 
-  getLeadsByStatus: (status: Lead['status']): Lead[] => {
-    const leads = leadsService.getAllLeads();
-    return leads.filter((l) => l.status === status).sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+  /**
+   * Get leads statistics
+   */
+  getStatistics: async (): Promise<{
+    total: number;
+    by_status: Record<string, number>;
+    conversion_rate: number;
+  }> => {
+    try {
+      const response = await api.get('/leads/statistics/all');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching lead statistics:', error);
+      return { total: 0, by_status: {}, conversion_rate: 0 };
+    }
   },
 
-  createLead: (lead: Omit<Lead, 'id' | 'createdAt' | 'status'>): Lead => {
-    const newLead: Lead = {
-      ...lead,
-      id: `LEAD-${Date.now()}`,
-      status: 'NEW',
-      createdAt: new Date().toISOString(),
-    };
+  /**
+   * Create a lead (admin, requires auth)
+   */
+  createLead: async (leadData: {
+    name: string;
+    phone: string;
+    email?: string;
+    planSlug: string;
+    preferredPaymentMethod: string;
+    notes?: string;
+    source?: string;
+  }): Promise<Lead> => {
+    const nameParts = leadData.name.trim().split(/\s+/);
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
 
-    const leads = leadsService.getAllLeads();
-    storage.set(STORAGE_KEYS.LEADS, [...leads, newLead]);
-    return newLead;
-  },
-
-  updateLead: (id: string, updates: Partial<Lead>): Lead | null => {
-    const leads = leadsService.getAllLeads();
-    const index = leads.findIndex((l) => l.id === id);
-    
-    if (index === -1) return null;
-
-    const updatedLead = {
-      ...leads[index],
-      ...updates,
-    };
-
-    leads[index] = updatedLead;
-    storage.set(STORAGE_KEYS.LEADS, leads);
-    return updatedLead;
-  },
-
-  convertToClient: (leadId: string): string | null => {
-    const lead = leadsService.getLeadById(leadId);
-    if (!lead) return null;
-
-    const client = clientsService.create({
-      name: lead.name,
-      phone: lead.phone,
-      email: lead.email,
-      status: 'INACTIVE',
+    const response = await api.post('/leads', {
+      first_name: firstName,
+      last_name: lastName,
+      email: leadData.email || null,
+      phone: leadData.phone,
+      plan_slug: leadData.planSlug,
+      preferred_payment_method: leadData.preferredPaymentMethod,
+      notes: leadData.notes || null,
+      source: leadData.source || 'admin',
+      status: 'new',
     });
 
-    leadsService.updateLead(leadId, { status: 'CONVERTED' });
-
-    return client.id;
+    return mapLeadFromBackend(response.data);
   },
 
-  deleteLead: (id: string): boolean => {
-    const leads = leadsService.getAllLeads();
-    const filtered = leads.filter((l) => l.id !== id);
-    
-    if (filtered.length === leads.length) return false;
+  /**
+   * Create a lead from the public website (NO auth required)
+   */
+  createPublicLead: async (leadData: {
+    name: string;
+    phone: string;
+    email?: string;
+    planSlug: string;
+    preferredPaymentMethod: string;
+  }): Promise<Lead> => {
+    const nameParts = leadData.name.trim().split(/\s+/);
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
 
-    storage.set(STORAGE_KEYS.LEADS, filtered);
-    return true;
+    const response = await api.post('/public/leads', {
+      first_name: firstName,
+      last_name: lastName,
+      email: leadData.email || null,
+      phone: leadData.phone,
+      plan_slug: leadData.planSlug,
+      preferred_payment_method: leadData.preferredPaymentMethod,
+    });
+
+    return mapLeadFromBackend(response.data.lead || response.data);
+  },
+
+  /**
+   * Update a lead
+   */
+  updateLead: async (id: string, updates: Partial<{
+    status: Lead['status'];
+    notes: string;
+    phone: string;
+    email: string;
+  }>): Promise<Lead | null> => {
+    try {
+      const payload: any = {};
+      if (updates.status) payload.status = updates.status;
+      if (updates.notes !== undefined) payload.notes = updates.notes;
+      if (updates.phone) payload.phone = updates.phone;
+      if (updates.email) payload.email = updates.email;
+
+      const response = await api.put(`/leads/${id}`, payload);
+      return mapLeadFromBackend(response.data);
+    } catch (error) {
+      console.error('Error updating lead:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Convert lead to client (calls backend endpoint)
+   */
+  convertToClient: async (leadId: string): Promise<{ clientId: string } | null> => {
+    try {
+      const response = await api.post(`/leads/${leadId}/convert`);
+      return {
+        clientId: response.data.client?.id?.toString() || '',
+      };
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Error al convertir lead';
+      throw new Error(message);
+    }
+  },
+
+  /**
+   * Delete a lead
+   */
+  deleteLead: async (id: string): Promise<boolean> => {
+    try {
+      await api.delete(`/leads/${id}`);
+      return true;
+    } catch (error) {
+      console.error('Error deleting lead:', error);
+      return false;
+    }
   },
 };

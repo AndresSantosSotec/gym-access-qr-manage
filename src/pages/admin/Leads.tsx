@@ -25,55 +25,109 @@ import {
 import { leadsService } from '@/services/leads.service';
 import { membershipsService } from '@/services/memberships.service';
 import { formatDate } from '@/utils/date';
-import { UserPlus, Phone, Envelope, CreditCard, ArrowRight } from '@phosphor-icons/react';
+import { UserPlus, Phone, Envelope, CreditCard, ArrowRight, ArrowsClockwise, Trash } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import type { Lead, MembershipPlan } from '@/types/models';
 
 export function Leads() {
   const navigate = useNavigate();
-  const [leads, setLeads] = useState(leadsService.getAllLeads());
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [stats, setStats] = useState<{ total: number; by_status: Record<string, number>; conversion_rate: number }>({
+    total: 0, by_status: {}, conversion_rate: 0,
+  });
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
-  const [filter, setFilter] = useState<Lead['status'] | 'all'>('all');
+  const [isConverting, setIsConverting] = useState(false);
+  const [filter, setFilter] = useState<string>('all');
 
-  const filteredLeads = filter === 'all'
-    ? leads
-    : leads.filter(l => l.status === filter);
-
-  const handleUpdateStatus = (leadId: string, status: Lead['status']) => {
-    leadsService.updateLead(leadId, { status });
-    setLeads(leadsService.getAllLeads());
-    toast.success('Estado actualizado');
+  const loadLeads = async () => {
+    try {
+      setIsLoading(true);
+      const [leadsData, statsData] = await Promise.all([
+        leadsService.getAllLeads({
+          status: filter === 'all' ? undefined : filter,
+        }),
+        leadsService.getStatistics(),
+      ]);
+      setLeads(leadsData);
+      setStats(statsData);
+    } catch (error) {
+      console.error('Error loading leads:', error);
+      toast.error('Error al cargar leads');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleConvert = () => {
-    if (!selectedLead) return;
+  useEffect(() => {
+    loadLeads();
+  }, [filter]);
 
-    const clientId = leadsService.convertToClient(selectedLead.id);
-    if (clientId) {
-      setLeads(leadsService.getAllLeads());
-      setIsConvertDialogOpen(false);
-      toast.success('Lead convertido a cliente exitosamente');
-      navigate(`/admin/clients/${clientId}`);
+  const filteredLeads = leads;
+
+  const handleUpdateStatus = async (leadId: string, status: Lead['status']) => {
+    const result = await leadsService.updateLead(leadId, { status });
+    if (result) {
+      toast.success('Estado actualizado');
+      loadLeads();
+    } else {
+      toast.error('Error al actualizar estado');
+    }
+  };
+
+  const handleConvert = async () => {
+    if (!selectedLead) return;
+    setIsConverting(true);
+
+    try {
+      const result = await leadsService.convertToClient(selectedLead.id);
+      if (result) {
+        setIsConvertDialogOpen(false);
+        toast.success('Lead convertido a cliente exitosamente');
+        loadLeads();
+        navigate(`/admin/clients`);
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Error al convertir lead');
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
+  const handleDelete = async (leadId: string) => {
+    if (!window.confirm('¿Estás seguro de eliminar este lead?')) return;
+    const deleted = await leadsService.deleteLead(leadId);
+    if (deleted) {
+      toast.success('Lead eliminado');
+      loadLeads();
+    } else {
+      toast.error('Error al eliminar lead');
     }
   };
 
   const getStatusBadge = (status: Lead['status']) => {
-    const variants = {
+    const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
       new: 'default',
       contacted: 'secondary',
+      interested: 'outline',
+      not_interested: 'destructive',
       converted: 'default',
-    } as const;
+    };
 
-    const labels = {
+    const labels: Record<string, string> = {
       new: 'Nuevo',
       contacted: 'Contactado',
+      interested: 'Interesado',
+      not_interested: 'No Interesado',
       converted: 'Convertido',
     };
 
     return (
-      <Badge variant={variants[status as keyof typeof variants]}>
-        {labels[status as keyof typeof labels]}
+      <Badge variant={variants[status] || 'outline'}
+        className={status === 'converted' ? 'bg-green-600' : status === 'new' ? 'bg-blue-600' : ''}
+      >
+        {labels[status] || status}
       </Badge>
     );
   };
@@ -105,17 +159,32 @@ export function Leads() {
       header: 'Plan Interesado',
       cell: (lead) => (
         <code className="text-xs bg-muted px-2 py-1 rounded">
-          {lead.planSlug}
+          {lead.planSlug || '-'}
         </code>
       )
     },
     {
       header: 'Método Preferido',
+      cell: (lead) => {
+        const methodLabels: Record<string, string> = {
+          cash: 'Efectivo',
+          card: 'Tarjeta',
+          transfer: 'Transferencia',
+        };
+        return (
+          <div className="flex items-center gap-2">
+            <CreditCard size={16} />
+            {methodLabels[lead.preferredPaymentMethod] || lead.preferredPaymentMethod}
+          </div>
+        );
+      }
+    },
+    {
+      header: 'Fuente',
       cell: (lead) => (
-        <div className="flex items-center gap-2">
-          <CreditCard size={16} />
-          {lead.preferredPaymentMethod === 'cash' ? 'Efectivo' : 'Tarjeta'}
-        </div>
+        <Badge variant="outline" className="text-xs">
+          {lead.source === 'website' ? 'Web' : lead.source === 'admin' ? 'Admin' : lead.source || '-'}
+        </Badge>
       )
     },
     {
@@ -132,16 +201,25 @@ export function Leads() {
       className: 'text-right',
       cell: (lead) => (
         <div className="flex items-center justify-end gap-2">
-          {lead.status === 'NEW' && (
+          {lead.status === 'new' && (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => handleUpdateStatus(lead.id, 'CONTACTED')}
+              onClick={() => handleUpdateStatus(lead.id, 'contacted')}
             >
               Marcar Contactado
             </Button>
           )}
-          {lead.status !== 'CONVERTED' && (
+          {lead.status === 'contacted' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleUpdateStatus(lead.id, 'interested')}
+            >
+              Interesado
+            </Button>
+          )}
+          {lead.status !== 'converted' && lead.status !== 'not_interested' && (
             <Button
               size="sm"
               onClick={() => {
@@ -152,6 +230,16 @@ export function Leads() {
             >
               <UserPlus size={16} />
               Convertir
+            </Button>
+          )}
+          {lead.status !== 'converted' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleDelete(lead.id)}
+              className="text-destructive hover:text-destructive"
+            >
+              <Trash size={16} />
             </Button>
           )}
         </div>
@@ -173,6 +261,17 @@ export function Leads() {
     loadPlans();
   }, []);
 
+  if (isLoading) {
+    return (
+      <div className="p-6 lg:p-8">
+        <div className="h-64 flex flex-col items-center justify-center gap-3">
+          <ArrowsClockwise className="animate-spin text-primary" size={32} />
+          <p className="text-muted-foreground text-sm">Cargando leads...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 lg:p-8 space-y-6">
       <div className="flex items-center justify-between">
@@ -182,20 +281,24 @@ export function Leads() {
             Solicitudes de suscripción desde la web pública
           </p>
         </div>
+        <Button variant="outline" onClick={loadLeads} className="gap-2">
+          <ArrowsClockwise size={16} />
+          Actualizar
+        </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Total Leads</CardDescription>
-            <CardTitle className="text-3xl">{leads.length}</CardTitle>
+            <CardTitle className="text-3xl">{stats.total}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Nuevos</CardDescription>
             <CardTitle className="text-3xl text-blue-600">
-              {leads.filter(l => l.status === 'NEW').length}
+              {stats.by_status?.new || 0}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -203,7 +306,7 @@ export function Leads() {
           <CardHeader className="pb-3">
             <CardDescription>Contactados</CardDescription>
             <CardTitle className="text-3xl text-yellow-600">
-              {leads.filter(l => l.status === 'CONTACTED').length}
+              {stats.by_status?.contacted || 0}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -211,7 +314,15 @@ export function Leads() {
           <CardHeader className="pb-3">
             <CardDescription>Convertidos</CardDescription>
             <CardTitle className="text-3xl text-green-600">
-              {leads.filter(l => l.status === 'CONVERTED').length}
+              {stats.by_status?.converted || 0}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardDescription>Tasa Conversión</CardDescription>
+            <CardTitle className="text-3xl text-purple-600">
+              {stats.conversion_rate}%
             </CardTitle>
           </CardHeader>
         </Card>
@@ -224,7 +335,7 @@ export function Leads() {
               <CardTitle>Lista de Leads</CardTitle>
               <CardDescription>Gestiona las solicitudes de membresía</CardDescription>
             </div>
-            <Select value={filter} onValueChange={(v) => setFilter(v as any)}>
+            <Select value={filter} onValueChange={(v) => setFilter(v)}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filtrar por estado" />
               </SelectTrigger>
@@ -232,6 +343,8 @@ export function Leads() {
                 <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="new">Nuevos</SelectItem>
                 <SelectItem value="contacted">Contactados</SelectItem>
+                <SelectItem value="interested">Interesados</SelectItem>
+                <SelectItem value="not_interested">No Interesados</SelectItem>
                 <SelectItem value="converted">Convertidos</SelectItem>
               </SelectContent>
             </Select>
@@ -251,7 +364,7 @@ export function Leads() {
           <DialogHeader>
             <DialogTitle>Convertir Lead a Cliente</DialogTitle>
             <DialogDescription>
-              Se creará un nuevo cliente con la información del lead
+              Se creará un nuevo cliente con la información del lead en la base de datos
             </DialogDescription>
           </DialogHeader>
 
@@ -273,12 +386,12 @@ export function Leads() {
               )}
               <div className="space-y-2">
                 <Label>Plan de Interés</Label>
-                <Input value={selectedLead.planSlug} disabled />
+                <Input value={selectedLead.planSlug || 'Sin plan'} disabled />
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm text-blue-900">
-                  Después de convertir, serás redirigido a la página del cliente donde podrás asignarle la membresía.
+                  Se creará un nuevo cliente en el sistema. Después podrás asignarle la membresía correspondiente.
                 </p>
               </div>
             </div>
@@ -288,9 +401,13 @@ export function Leads() {
             <Button variant="outline" onClick={() => setIsConvertDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleConvert} className="gap-2">
+            <Button onClick={handleConvert} disabled={isConverting} className="gap-2">
+              {isConverting ? (
+                <ArrowsClockwise size={16} className="animate-spin" />
+              ) : (
+                <ArrowRight size={16} />
+              )}
               Convertir a Cliente
-              <ArrowRight size={16} />
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -52,7 +52,9 @@ export function PublicSubscribe() {
     preferredPaymentMethod: 'cash' as 'cash' | 'card',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.name || !formData.phone || !formData.planSlug) {
@@ -60,19 +62,29 @@ export function PublicSubscribe() {
       return;
     }
 
-    const lead = leadsService.createLead({
-      name: formData.name,
-      phone: formData.phone,
-      email: formData.email || undefined,
-      planSlug: formData.planSlug,
-      preferredPaymentMethod: formData.preferredPaymentMethod,
-    });
+    setSubmitting(true);
+    try {
+      await leadsService.createPublicLead({
+        name: formData.name,
+        phone: formData.phone,
+        email: formData.email || undefined,
+        planSlug: formData.planSlug,
+        preferredPaymentMethod: formData.preferredPaymentMethod,
+      });
 
-    toast.success('¡Solicitud enviada! Te contactaremos pronto.');
-    
-    setTimeout(() => {
-      navigate('/p');
-    }, 2000);
+      toast.success('¡Solicitud enviada! Te contactaremos pronto.');
+      setTimeout(() => {
+        navigate('/p');
+      }, 2000);
+    } catch (error: any) {
+      if (error?.response?.status === 429) {
+        toast.error('Ya recibimos tu solicitud. Te contactaremos pronto.');
+      } else {
+        toast.error('Error al enviar la solicitud. Intenta de nuevo.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -172,8 +184,8 @@ export function PublicSubscribe() {
                       </Select>
                     </div>
 
-                    <Button type="submit" className="w-full" size="lg">
-                      Enviar Solicitud
+                    <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+                      {submitting ? 'Enviando...' : 'Enviar Solicitud'}
                     </Button>
                     </form>
                   </CardContent>
