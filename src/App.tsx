@@ -37,9 +37,13 @@ import { PublicBlogDetail } from '@/pages/public/PublicBlogDetail';
 import { PublicSubscribe } from '@/pages/public/PublicSubscribe';
 import { PublicContact } from '@/pages/public/PublicContact';
 import { PublicStripeDemoCheckout } from '@/pages/public/PublicStripeDemoCheckout';
+import { PausarMembresia } from '@/pages/admin/PausarMembresia';
+import { ReactivarCobro } from '@/pages/admin/ReactivarCobro';
+import { MembresiaRiesgo } from '@/pages/admin/MembresiaRiesgo';
 
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { Forbidden } from '@/pages/admin/Forbidden';
+import { ProtectedRoute, GuestRoute } from '@/components/AuthGuards';
 
 function ThemeApplicator() {
   useThemeColors();
@@ -51,9 +55,17 @@ function App() {
     <BrowserRouter>
       <ThemeApplicator />
       <Routes>
+        {/* Base redirect to landing */}
         <Route path="/" element={<Navigate to="/p" replace />} />
-        <Route path="/login" element={<AdminLogin />} />
 
+        {/* Guest route (only accessible if NOT logged in) */}
+        <Route path="/login" element={
+          <GuestRoute>
+            <AdminLogin />
+          </GuestRoute>
+        } />
+
+        {/* Public routes (always accessible, no auth checks) */}
         <Route path="/p" element={<PublicHome />} />
         <Route path="/p/planes" element={<PublicPlans />} />
         <Route path="/p/planes/:slug" element={<PublicPlanDetail />} />
@@ -64,7 +76,12 @@ function App() {
         <Route path="/p/pago-demo" element={<PublicStripeDemoCheckout />} />
         <Route path="/qr/:clientId" element={<QrPass />} />
 
-        <Route path="/admin" element={<AdminLayout />}>
+        {/* Admin protected routes */}
+        <Route path="/admin" element={
+          <ProtectedRoute>
+            <AdminLayout />
+          </ProtectedRoute>
+        }>
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="forbidden" element={<Forbidden />} />
 
@@ -83,6 +100,9 @@ function App() {
           {/* Gestión de Gimnasio */}
           <Route element={<PermissionGuard permission="MEMBERSHIPS_VIEW" />}>
             <Route path="memberships" element={<Memberships />} />
+            <Route path="memberships/riesgo" element={<MembresiaRiesgo />} />
+            <Route path="memberships/:membershipId/pausar" element={<PausarMembresia />} />
+            <Route path="clients/:clientId/reactivar-cobro" element={<ReactivarCobro />} />
           </Route>
 
           <Route element={<PermissionGuard permission="PAYMENTS_VIEW" />}>

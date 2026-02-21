@@ -38,8 +38,9 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       storage.remove(STORAGE_KEYS.AUTH);           // 'gym_auth'
       storage.remove('auth-state' as any);          // legacy key
-      // Redirigir al login
-      if (window.location.pathname !== '/login') {
+      // Evitar redirigir a /login si ya estamos ahí o si estamos en zona pública (/p)
+      const isPublicRoute = window.location.pathname.startsWith('/p') || window.location.pathname === '/';
+      if (!isPublicRoute && window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
     }

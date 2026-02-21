@@ -1,12 +1,16 @@
 import { Link } from 'react-router-dom';
 import { Barbell, List, X } from '@phosphor-icons/react';
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { useState, useEffect } from 'react';
 import { siteService } from '@/services/site.service';
+import type { SiteConfig } from '@/types/models';
 
 export function PublicNavbar() {
   const [isOpen, setIsOpen] = useState(false);
-  const config = siteService.getConfig();
+  const [config, setConfig] = useState<SiteConfig>(siteService.getDefaultConfig());
+
+  useEffect(() => {
+    siteService.getConfig().then(setConfig).catch(console.error);
+  }, []);
 
   const navLinks = [
     { to: '/p', label: 'Inicio' },
@@ -39,9 +43,6 @@ export function PublicNavbar() {
                 {link.label}
               </Link>
             ))}
-            <Button asChild size="sm">
-              <Link to="/login">Admin</Link>
-            </Button>
           </div>
 
           <button
@@ -64,9 +65,6 @@ export function PublicNavbar() {
                 {link.label}
               </Link>
             ))}
-            <Button asChild size="sm" className="w-full">
-              <Link to="/login">Admin</Link>
-            </Button>
           </div>
         )}
       </div>
