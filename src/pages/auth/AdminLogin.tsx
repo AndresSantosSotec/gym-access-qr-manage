@@ -47,8 +47,12 @@ export function AdminLogin() {
       await login(email, password);
       toast.success('¡Bienvenido!');
       navigate('/admin/dashboard');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al iniciar sesión');
+    } catch (error: any) {
+      const msg =
+        error?.response?.data?.message ??
+        error?.response?.data?.errors?.email?.[0] ??
+        (error instanceof Error ? error.message : 'Error al iniciar sesión');
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }

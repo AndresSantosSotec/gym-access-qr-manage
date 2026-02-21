@@ -109,7 +109,7 @@ export function Identifier() {
                                         <SelectContent>
                                             <SelectItem value="unknown">Huella No Registrada</SelectItem>
                                             {clients.map(client => (
-                                                <SelectItem key={client.id} value={client.id}>
+                                                <SelectItem key={String(client.id ?? '')} value={String(client.id ?? '')}>
                                                     {client.name} (ID: {client.fingerprintId?.substring(0, 8) || '?'})
                                                 </SelectItem>
                                             ))}

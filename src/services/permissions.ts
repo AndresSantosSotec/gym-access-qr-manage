@@ -6,6 +6,14 @@ export const can = async (permission: PermissionKey): Promise<boolean> => {
   const auth = await authService.getCurrentUser();
   if (!auth) return false;
 
+  // If user already has the role object loaded with permissions, use it directly
+  if (auth.user.role?.permissions) {
+    return auth.user.role.permissions.includes(permission);
+  }
+
+  // Fallback: fetch role by ID (avoid calling with undefined)
+  if (!auth.user.roleId) return false;
+
   const role = await rolesService.getRoleById(auth.user.roleId);
   if (!role) return false;
 

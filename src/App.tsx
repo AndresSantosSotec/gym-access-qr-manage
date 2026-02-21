@@ -19,6 +19,7 @@ import { Reports } from '@/pages/admin/Reports';
 import { Notifications } from '@/pages/admin/Notifications';
 import { Cameras } from '@/pages/admin/Cameras';
 import { Fingerprints } from '@/pages/admin/Fingerprints';
+import { Identifier } from '@/pages/admin/Identifier';
 import { Staff } from '@/pages/admin/Staff';
 import { StaffForm } from '@/pages/admin/StaffForm';
 import { Products } from '@/pages/admin/commercial/Products';
@@ -92,6 +93,7 @@ function App() {
           <Route element={<PermissionGuard permission="ACCESS_VIEW" />}>
             <Route path="access" element={<AccessControl />} />
             <Route path="fingerprints" element={<Fingerprints />} />
+            <Route path="identifier" element={<Identifier />} />
           </Route>
 
           {/* Configuración de Sitio */}

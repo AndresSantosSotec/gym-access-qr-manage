@@ -45,6 +45,7 @@ const menuItems: MenuItem[] = [
   { to: '/admin/receipts', icon: Receipt, label: 'Recibos y Facturas', permission: 'PAYMENTS_VIEW' },
   { to: '/admin/access', icon: QrCode, label: 'Control de Acceso', permission: 'ACCESS_VIEW' },
   { to: '/admin/fingerprints', icon: Fingerprint, label: 'Huellas Digitales', permission: 'ACCESS_VIEW' },
+  { to: '/admin/identifier', icon: Fingerprint, label: 'Identificador Huella', permission: 'ACCESS_VIEW' },
   { to: '/admin/staff', icon: UserList, label: 'Personal y Staff', permission: 'USERS_VIEW' },
   { to: '/admin/productos', icon: Package, label: 'Productos', permission: 'PRODUCTS_VIEW' },
   { to: '/admin/inventario', icon: Warehouse, label: 'Inventario', permission: 'INVENTORY_VIEW' },

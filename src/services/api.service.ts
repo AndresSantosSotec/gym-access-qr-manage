@@ -36,8 +36,9 @@ apiClient.interceptors.response.use(
   (error: AxiosError) => {
     // Si el error es 401 (no autenticado), limpiar sesión
     if (error.response?.status === 401) {
-      storage.remove(STORAGE_KEYS.AUTH);
-      // Redirigir al login (opcional)
+      storage.remove(STORAGE_KEYS.AUTH);           // 'gym_auth'
+      storage.remove('auth-state' as any);          // legacy key
+      // Redirigir al login
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
