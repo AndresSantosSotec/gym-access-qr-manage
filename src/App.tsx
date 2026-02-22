@@ -35,6 +35,8 @@ import { PublicPlanDetail } from '@/pages/public/PublicPlanDetail';
 import { PublicBlog } from '@/pages/public/PublicBlog';
 import { PublicBlogDetail } from '@/pages/public/PublicBlogDetail';
 import { PublicSubscribe } from '@/pages/public/PublicSubscribe';
+import { PaymentSuccess } from '@/pages/public/PaymentSuccess';
+import { PaymentFailure } from '@/pages/public/PaymentFailure';
 import { PublicContact } from '@/pages/public/PublicContact';
 import { PublicStripeDemoCheckout } from '@/pages/public/PublicStripeDemoCheckout';
 import { PausarMembresia } from '@/pages/admin/PausarMembresia';
@@ -72,6 +74,8 @@ function App() {
         <Route path="/p/blog" element={<PublicBlog />} />
         <Route path="/p/blog/:slug" element={<PublicBlogDetail />} />
         <Route path="/p/suscripcion" element={<PublicSubscribe />} />
+        <Route path="/p/pago-exitoso" element={<PaymentSuccess />} />
+        <Route path="/p/pago-fallido" element={<PaymentFailure />} />
         <Route path="/p/contacto" element={<PublicContact />} />
         <Route path="/p/pago-demo" element={<PublicStripeDemoCheckout />} />
         <Route path="/qr/:clientId" element={<QrPass />} />
@@ -151,10 +155,18 @@ function App() {
           </Route>
 
           {/* Otros */}
-          <Route path="reports" element={<Reports />} />
-          <Route path="notifications" element={<Notifications />} />
-          <Route path="cameras" element={<Cameras />} />
-          <Route path="settings" element={<Settings />} />
+          <Route element={<PermissionGuard permission="REPORTS_VIEW" />}>
+            <Route path="reports" element={<Reports />} />
+          </Route>
+          <Route element={<PermissionGuard permission="NOTIFICATIONS_VIEW" />}>
+            <Route path="notifications" element={<Notifications />} />
+          </Route>
+          <Route element={<PermissionGuard permission="CAMERAS_VIEW" />}>
+            <Route path="cameras" element={<Cameras />} />
+          </Route>
+          <Route element={<PermissionGuard permission="SETTINGS_VIEW" />}>
+            <Route path="settings" element={<Settings />} />
+          </Route>
         </Route>
 
         <Route path="*" element={<Navigate to="/p" replace />} />

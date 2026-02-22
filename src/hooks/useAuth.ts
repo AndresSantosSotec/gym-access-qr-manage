@@ -70,7 +70,7 @@ export function useAuth() {
               name: backendUser.role.name,
               description: backendUser.role.description ?? '',
               permissions: (backendUser.role.permissions ?? []).map(
-                (p: any) => p.name ?? p
+                (p: any) => p.slug ?? p.name ?? p
               ),
               createdAt: backendUser.role.created_at ?? '',
             }

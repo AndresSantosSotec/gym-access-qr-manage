@@ -1,31 +1,40 @@
-import { authService } from './auth.service';
-import { rolesService } from './roles.service';
 import type { PermissionKey } from '@/types/models';
+import { storage, STORAGE_KEYS } from '@/utils/storage';
+import type { AuthState } from '@/types/models';
 
-export const can = async (permission: PermissionKey): Promise<boolean> => {
-  const auth = await authService.getCurrentUser();
-  if (!auth) return false;
-
-  // If user already has the role object loaded with permissions, use it directly
-  if (auth.user.role?.permissions) {
-    return auth.user.role.permissions.includes(permission);
+/**
+ * Lee los permisos del usuario desde localStorage (síncrono).
+ * No necesita async — los permisos ya vienen incluidos en el AuthState
+ * desde el momento del login (useAuth.ts los guarda en 'gym_auth').
+ */
+function getLocalPermissions(): PermissionKey[] {
+  try {
+    const raw = storage.get<AuthState>(STORAGE_KEYS.AUTH);
+    return (raw?.user?.role?.permissions ?? []) as PermissionKey[];
+  } catch {
+    return [];
   }
+}
 
-  // Fallback: fetch role by ID (avoid calling with undefined)
-  if (!auth.user.roleId) return false;
+/**
+ * Verifica síncronamente si el usuario tiene un permiso.
+ * Lee del localStorage — nunca hace un fetch de red.
+ */
+export function can(permission: PermissionKey): boolean {
+  const perms = getLocalPermissions();
+  return perms.includes(permission);
+}
 
-  const role = await rolesService.getRoleById(auth.user.roleId);
-  if (!role) return false;
+/**
+ * Verifica si el usuario tiene AL MENOS UNO de los permisos.
+ */
+export function canAny(permissions: PermissionKey[]): boolean {
+  return permissions.some(p => can(p));
+}
 
-  return role.permissions.includes(permission);
-};
-
-export const canAny = async (permissions: PermissionKey[]): Promise<boolean> => {
-  const results = await Promise.all(permissions.map(p => can(p)));
-  return results.some(r => r);
-};
-
-export const canAll = async (permissions: PermissionKey[]): Promise<boolean> => {
-  const results = await Promise.all(permissions.map(p => can(p)));
-  return results.every(r => r);
-};
+/**
+ * Verifica si el usuario tiene TODOS los permisos.
+ */
+export function canAll(permissions: PermissionKey[]): boolean {
+  return permissions.every(p => can(p));
+}

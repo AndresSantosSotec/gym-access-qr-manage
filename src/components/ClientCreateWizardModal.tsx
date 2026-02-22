@@ -16,6 +16,7 @@ import { membershipsService } from '@/services/memberships.service';
 import { paymentsService } from '@/services/payments.service';
 import { cashService } from '@/services/cash.service';
 import { recurrenteService } from '@/services/recurrente.service';
+import { RecurrenteCheckoutEmbed } from './RecurrenteCheckoutEmbed';
 import type { MembershipPlan } from '@/types/models';
 import { Check, Camera, Upload, X, Fingerprint, CreditCard, MagnifyingGlass, ArrowSquareOut } from '@phosphor-icons/react';
 import { toast } from 'sonner';
@@ -169,7 +170,10 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
   };
 
   /**
-   * RECURRENTE — Paso 1: crear cliente, luego abrir checkout de Recurrente.
+   * RECURRENTE — Embedded Checkout.
+   * 1. Crea el cliente en BD.
+   * 2. Obtiene checkout_url del backend.
+   * 3. Carga el iframe incrustado de Recurrente dentro del modal.
    * El webhook de Recurrente activará la membresía automáticamente.
    */
   const handleOpenRecurrenteCheckout = async () => {
@@ -201,33 +205,36 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
       const { checkout_url } = await recurrenteService.createCheckout(
         Number(newClient.id),
         parseInt(selectedPlanId, 10),
-        `${window.location.origin}/pago-exitoso?client=${newClient.id}`,
-        `${window.location.origin}/pago-cancelado`,
+        `${window.location.origin}/pagos/exitoso?client=${newClient.id}`,
+        `${window.location.origin}/pagos/cancelado`,
       );
+
+      if (!checkout_url) {
+        throw new Error('No se recibió URL de checkout de Recurrente. Verifica que el plan tenga recurrente_product_id asignado.');
+      }
 
       setCheckoutUrl(checkout_url);
       setWaitingPayment(true);
 
-      // 3. Abrir el portal de Recurrente en nueva pestaña
-      window.open(checkout_url, '_blank');
-
-      toast.info('🔗 Se abrió el portal de pago de Recurrente en una nueva pestaña. El cliente debe completar el pago allí.');
+      toast.info('💳 Ingresa los datos de la tarjeta en el formulario de abajo.');
 
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      const msg = (err as any)?.response?.data?.message
+        ?? (err as Error)?.message
         ?? 'No se pudo iniciar el checkout con Recurrente';
       toast.error(msg);
-    } finally {
       setIsSubmitting(false);
+      return;
     }
+    setIsSubmitting(false);
   };
 
-  /** Confirmar que el pago fue completado en el portal (el webhook ya lo activó) */
-  const handleConfirmPaymentDone = async () => {
-    // Esperar el webhook — simplemente cerramos y recargamos
-    toast.success('✅ Membresía activada vía Recurrente. El sistema se actualizará automáticamente.');
-    onSuccess();
-    handleClose();
+  /** Cancelar / volver atrás desde el embedded checkout */
+  const handleCancelEmbeddedCheckout = () => {
+    setWaitingPayment(false);
+    setCheckoutUrl(null);
+    setCheckoutClientId(null);
+    toast.info('Pago cancelado. Puedes intentar de nuevo.');
   };
 
   const handleFinish = async (finalPaymentMethod?: typeof paymentMethod) => {
@@ -803,70 +810,81 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
                     </div>
 
                     {paymentMethod === 'RECURRENTE' && (
-                      <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-                        <div className="flex items-center gap-2 mb-2">
-                          <CreditCard size={20} className="text-primary" />
-                          <h4 className="font-semibold">Pago con Tarjeta via Recurrente</h4>
-                        </div>
+                      <div className="space-y-3">
 
                         {!waitingPayment ? (
-                          <>
-                            <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                          // ── Estado inicial: botón para iniciar el checkout ──
+                          <div className="p-4 border rounded-lg bg-muted/30">
+                            <div className="flex items-center gap-2 mb-3">
+                              <CreditCard size={20} className="text-primary" />
+                              <h4 className="font-semibold">Pago con Tarjeta</h4>
+                            </div>
+                            <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 mb-3">
                               <CardContent className="p-3">
                                 <p className="text-xs text-blue-800 dark:text-blue-200">
-                                  <strong>Pago seguro:</strong> Al hacer clic, se creará el cliente y se abrirá
-                                  el portal de pago de Recurrente en una nueva pestaña. Una vez completado,
-                                  la membresía se activará automáticamente.
+                                  <strong>Pago seguro:</strong> Al hacer clic, el formulario de pago aparecerá
+                                  aquí mismo en esta ventana. No necesitas salir de esta pantalla.
                                 </p>
                               </CardContent>
                             </Card>
-
                             <Button
                               id="open-recurrente-checkout-btn"
                               onClick={handleOpenRecurrenteCheckout}
                               disabled={isSubmitting}
                               className="w-full bg-green-600 hover:bg-green-700"
                             >
-                              {isSubmitting
-                                ? <span className="mr-2">Abriendo...</span>
-                                : <ArrowSquareOut size={18} className="mr-2" />
-                              }
-                              Pagar con Tarjeta (Recurrente)
+                              <CreditCard size={18} className="mr-2" />
+                              {isSubmitting ? 'Preparando pago...' : 'Pagar con Tarjeta'}
                             </Button>
-                          </>
+                          </div>
                         ) : (
-                          <>
-                            <Card className="bg-green-50 dark:bg-green-950 border-green-300">
-                              <CardContent className="p-4">
-                                <p className="text-sm text-green-800 dark:text-green-200 font-medium">
-                                  ✅ Portal de pago abierto en nueva pestaña.
-                                </p>
-                                <p className="text-xs text-green-700 dark:text-green-300 mt-1">
-                                  El cliente debe completar el pago en la página de Recurrente.
-                                  Una vez confirmado, haz clic en el botón de abajo.
-                                </p>
-                                {checkoutUrl && (
-                                  <a
-                                    href={checkoutUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-xs text-blue-600 underline mt-2 block"
-                                  >
-                                    Abrir enlace nuevamente →
-                                  </a>
-                                )}
-                              </CardContent>
-                            </Card>
-
-                            <Button
-                              id="confirm-recurrente-payment-btn"
-                              onClick={handleConfirmPaymentDone}
-                              className="w-full bg-green-600 hover:bg-green-700"
-                            >
-                              <Check size={18} className="mr-2" weight="bold" />
-                              El cliente completó el pago ✓
-                            </Button>
-                          </>
+                          // ── Estado activo: iframe embedded de Recurrente ──
+                          <div className="border rounded-lg overflow-hidden">
+                            <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950 border-b">
+                              <div className="flex items-center gap-2">
+                                <CreditCard size={18} className="text-green-600" />
+                                <span className="text-sm font-semibold text-green-800 dark:text-green-200">
+                                  Ingresa los datos de tu tarjeta
+                                </span>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleCancelEmbeddedCheckout}
+                                className="text-xs text-muted-foreground h-7"
+                              >
+                                <X size={14} className="mr-1" /> Cancelar
+                              </Button>
+                            </div>
+                            {/* Iframe embebido de Recurrente */}
+                            <RecurrenteCheckoutEmbed
+                              checkoutUrl={checkoutUrl!}
+                              onSuccess={(paymentData) => {
+                                console.log('[Recurrente] ✅ Pago exitoso:', paymentData);
+                                toast.success('✅ Pago completado exitosamente');
+                                setWaitingPayment(false);
+                                onSuccess();
+                                handleClose();
+                              }}
+                              onFailure={(error) => {
+                                const msg = error?.message ?? error?.notice ?? 'El pago fue rechazado';
+                                console.warn('[Recurrente] ❌ Pago fallido:', error);
+                                if (error?.type === 'notice' || error?.notice) {
+                                  toast.warning(msg);
+                                } else {
+                                  toast.error(`Pago rechazado: ${msg}`);
+                                }
+                              }}
+                              onPaymentInProgress={() => {
+                                console.log('[Recurrente] ⏳ Pago por transferencia en proceso');
+                                toast.info('Pago por transferencia bancaria en proceso. Recibirás confirmación en tu correo.');
+                                setWaitingPayment(false);
+                                onSuccess();
+                                handleClose();
+                              }}
+                              height="550px"
+                            />
+                          </div>
                         )}
                       </div>
                     )}

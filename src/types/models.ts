@@ -37,6 +37,9 @@ export interface MembershipPlan {
   features: string[];
   published: boolean;
   slug: string;
+  recurrente_product_id?: string | null;
+  recurrente_price_id?: string | null;
+  synced_with_recurrente?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -122,7 +125,7 @@ export type PermissionKey =
   | 'MEMBERSHIPS_VIEW' | 'MEMBERSHIPS_MANAGE'
   | 'PAYMENTS_VIEW' | 'PAYMENTS_MANAGE'
   | 'CASH_VIEW' | 'CASH_MANAGE'
-  | 'INVENTORY_VIEW' | 'INVENTORY_IN' | 'INVENTORY_OUT'
+  | 'INVENTORY_VIEW' | 'INVENTORY_IN' | 'INVENTORY_OUT' | 'INVENTORY_MANAGE'
   | 'PRODUCTS_VIEW' | 'PRODUCTS_CREATE' | 'PRODUCTS_EDIT' | 'PRODUCTS_DELETE'
   | 'SALES_VIEW' | 'SALES_CREATE' | 'QUOTES_VIEW' | 'SALES_CLIENTS_MANAGE'
   | 'ACCESS_VIEW' | 'ACCESS_MANAGE'

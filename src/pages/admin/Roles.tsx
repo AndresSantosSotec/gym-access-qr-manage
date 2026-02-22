@@ -36,11 +36,14 @@ const PERMISSION_GROUPS = {
   'Membresías': ['MEMBERSHIPS_VIEW', 'MEMBERSHIPS_MANAGE'] as PermissionKey[],
   'Pagos': ['PAYMENTS_VIEW', 'PAYMENTS_MANAGE'] as PermissionKey[],
   'Caja': ['CASH_VIEW', 'CASH_MANAGE'] as PermissionKey[],
-  'Inventario': ['INVENTORY_VIEW', 'INVENTORY_MANAGE'] as PermissionKey[],
+  'Inventario': ['INVENTORY_VIEW', 'INVENTORY_IN', 'INVENTORY_OUT', 'INVENTORY_MANAGE'] as PermissionKey[],
+  'Productos': ['PRODUCTS_VIEW', 'PRODUCTS_CREATE', 'PRODUCTS_EDIT', 'PRODUCTS_DELETE'] as PermissionKey[],
+  'Ventas': ['SALES_VIEW', 'SALES_CREATE', 'QUOTES_VIEW', 'SALES_CLIENTS_MANAGE'] as PermissionKey[],
   'Control de Acceso': ['ACCESS_VIEW', 'ACCESS_MANAGE'] as PermissionKey[],
   'Configuración': ['SETTINGS_VIEW', 'SETTINGS_MANAGE'] as PermissionKey[],
   'Roles': ['ROLES_VIEW', 'ROLES_MANAGE'] as PermissionKey[],
   'Usuarios': ['USERS_VIEW', 'USERS_MANAGE'] as PermissionKey[],
+  'Otros': ['REPORTS_VIEW', 'NOTIFICATIONS_VIEW', 'CAMERAS_VIEW'] as PermissionKey[],
 };
 
 export function Roles() {
