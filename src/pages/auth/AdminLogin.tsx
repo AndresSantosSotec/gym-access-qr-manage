@@ -66,7 +66,7 @@ export function AdminLogin() {
             <Barbell className="text-primary-foreground" size={32} weight="bold" />
           </div>
           <div>
-            <CardTitle className="text-3xl font-bold">GymFlow</CardTitle>
+            <CardTitle className="text-3xl font-bold">IronGym</CardTitle>
             <CardDescription className="text-base mt-2">
               Sistema de gestión de membresías
             </CardDescription>

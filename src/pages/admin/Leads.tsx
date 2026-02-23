@@ -261,16 +261,7 @@ export function Leads() {
     loadPlans();
   }, []);
 
-  if (isLoading) {
-    return (
-      <div className="p-6 lg:p-8">
-        <div className="h-64 flex flex-col items-center justify-center gap-3">
-          <ArrowsClockwise className="animate-spin text-primary" size={32} />
-          <p className="text-muted-foreground text-sm">Cargando leads...</p>
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
@@ -354,6 +345,7 @@ export function Leads() {
           <DataTable
             data={filteredLeads}
             columns={columns}
+            isLoading={isLoading}
             emptyMessage="No hay leads para mostrar"
           />
         </CardContent>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -59,6 +59,9 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [waitingPayment, setWaitingPayment] = useState(false);
   const [checkoutClientId, setCheckoutClientId] = useState<number | null>(null);
+  const [paymentReference, setPaymentReference] = useState('');
+  const [transferDate, setTransferDate] = useState(new Date().toISOString().split('T')[0]);
+  const [transferDocument, setTransferDocument] = useState<string>('');
 
   const [inscriptionFee, setInscriptionFee] = useState<number>(0);
   const [planSearch, setPlanSearch] = useState('');
@@ -97,6 +100,9 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
     setCheckoutUrl(null);
     setWaitingPayment(false);
     setCheckoutClientId(null);
+    setPaymentReference('');
+    setTransferDate(new Date().toISOString().split('T')[0]);
+    setTransferDocument('');
     setInscriptionFee(0);
     setPlanSearch('');
   };
@@ -169,6 +175,26 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
     toast.info('Huella eliminada');
   };
 
+  const handleDocumentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+      toast.error('Solo se permiten imágenes o PDF');
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.warning('El archivo es mayor a 2MB, puede afectar el rendimiento');
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setTransferDocument(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
   /**
    * RECURRENTE — Embedded Checkout.
    * 1. Crea el cliente en BD.
@@ -202,12 +228,16 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
       setCheckoutClientId(Number(newClient.id));
 
       // 2. Obtener URL de checkout de Recurrente
-      const { checkout_url } = await recurrenteService.createCheckout(
+      const checkoutResponse = await recurrenteService.createCheckout(
         Number(newClient.id),
         parseInt(selectedPlanId, 10),
-        `${window.location.origin}/pagos/exitoso?client=${newClient.id}`,
-        `${window.location.origin}/pagos/cancelado`,
+        `${window.location.origin}/p/pago-exitoso?client_id=${newClient.id}`,
+        `${window.location.origin}/p/pago-fallido`,
       );
+
+      console.log('[DEBUG] Recurrente checkout response completo:', checkoutResponse);
+
+      const { checkout_url } = checkoutResponse;
 
       if (!checkout_url) {
         throw new Error('No se recibió URL de checkout de Recurrente. Verifica que el plan tenga recurrente_product_id asignado.');
@@ -284,16 +314,21 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
             inscriptionFee,
           });
 
+          const finalReference = method === 'TRANSFER' && transferDate
+            ? `${paymentReference} (Fecha: ${transferDate})`
+            : (paymentReference || undefined);
+
           const result = await membershipsService.assignMembership(
             newClient.id,
             selectedPlanId,
             method === 'RECURRENTE' ? 'CARD' : method,  // backend accepts CARD not RECURRENTE
             totalAmountPaid,
-            undefined, // reference
+            finalReference, // reference
             'single', // paymentType
             1, // numInstallments
             undefined, // initialPayment
-            inscriptionFee > 0 ? inscriptionFee : undefined // inscriptionFee
+            inscriptionFee > 0 ? inscriptionFee : undefined, // inscriptionFee
+            method === 'TRANSFER' && transferDocument ? transferDocument : undefined
           );
 
           console.log('[Wizard] Membership assigned successfully:', result);
@@ -345,6 +380,7 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl">Nuevo Cliente</DialogTitle>
+            <DialogDescription className="sr-only">Formulario para registrar un nuevo cliente</DialogDescription>
           </DialogHeader>
 
           <div className="flex items-center justify-between mb-6">
@@ -817,80 +853,103 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
                           <div className="p-4 border rounded-lg bg-muted/30">
                             <div className="flex items-center gap-2 mb-3">
                               <CreditCard size={20} className="text-primary" />
-                              <h4 className="font-semibold">Pago con Tarjeta</h4>
+                              <h4 className="font-semibold">Pago con Tarjeta (Recurrente)</h4>
                             </div>
                             <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 mb-3">
                               <CardContent className="p-3">
                                 <p className="text-xs text-blue-800 dark:text-blue-200">
-                                  <strong>Pago seguro:</strong> Al hacer clic, el formulario de pago aparecerá
-                                  aquí mismo en esta ventana. No necesitas salir de esta pantalla.
+                                  <strong>Pago seguro:</strong> Al hacer clic se creará el cliente y se generará un enlace de pago que se abrirá en una nueva pestaña.
                                 </p>
                               </CardContent>
                             </Card>
+                            {!email.trim() && (
+                              <Card className="bg-yellow-50 dark:bg-yellow-950 border-yellow-300 dark:border-yellow-700 mb-3">
+                                <CardContent className="p-3">
+                                  <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                                    ⚠️ <strong>Requerido:</strong> Ingresa el correo del cliente en el paso anterior para poder usar pago con tarjeta.
+                                  </p>
+                                </CardContent>
+                              </Card>
+                            )}
                             <Button
                               id="open-recurrente-checkout-btn"
                               onClick={handleOpenRecurrenteCheckout}
-                              disabled={isSubmitting}
+                              disabled={isSubmitting || !email.trim()}
                               className="w-full bg-green-600 hover:bg-green-700"
                             >
                               <CreditCard size={18} className="mr-2" />
-                              {isSubmitting ? 'Preparando pago...' : 'Pagar con Tarjeta'}
+                              {isSubmitting ? 'Generando enlace de pago...' : 'Generar Enlace de Pago'}
                             </Button>
                           </div>
                         ) : (
-                          // ── Estado activo: iframe embedded de Recurrente ──
-                          <div className="border rounded-lg overflow-hidden">
-                            <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950 border-b">
-                              <div className="flex items-center gap-2">
-                                <CreditCard size={18} className="text-green-600" />
-                                <span className="text-sm font-semibold text-green-800 dark:text-green-200">
-                                  Ingresa los datos de tu tarjeta
-                                </span>
-                              </div>
+                          // ── Estado activo: Redirigir a Recurrente ──
+                          <div className="border rounded-lg p-5 text-center bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                            <h4 className="font-semibold text-lg text-blue-900 dark:text-blue-100 mb-2">Enlace de Pago Generado</h4>
+                            <p className="text-sm text-blue-800 dark:text-blue-200 mb-4">
+                              Abre la pasarela de pago de Recurrente. Cuando el cliente haya completado el pago, haz clic en "Confirmar y Activar Membresía".
+                            </p>
+                            <div className="flex flex-col gap-3">
                               <Button
+                                type="button"
+                                onClick={() => window.open(checkoutUrl!, '_blank')}
+                                className="w-full bg-blue-600 hover:bg-blue-700"
+                                size="lg"
+                              >
+                                <CreditCard size={18} className="mr-2" />
+                                Abrir Pasarela de Pago
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                disabled={isSubmitting}
+                                onClick={async () => {
+                                  // Assign membership to the already-created client
+                                  if (checkoutClientId && selectedPlanId && selectedPlan) {
+                                    setIsSubmitting(true);
+                                    try {
+                                      await membershipsService.assignMembership(
+                                        String(checkoutClientId),
+                                        selectedPlanId,
+                                        'CARD',
+                                        selectedPlan.price + inscriptionFee,
+                                        `recurrente:${checkoutUrl}`,
+                                        'single',
+                                        1,
+                                        undefined,
+                                        inscriptionFee > 0 ? inscriptionFee : undefined,
+                                        undefined
+                                      );
+                                      toast.success(`✅ Membresía "${selectedPlan.name}" activada`);
+                                    } catch (err: any) {
+                                      toast.error(err?.response?.data?.message || 'Error al asignar membresía');
+                                    } finally {
+                                      setIsSubmitting(false);
+                                    }
+                                  }
+                                  setWaitingPayment(false);
+                                  onSuccess();
+                                  handleClose();
+                                }}
+                              >
+                                {isSubmitting ? 'Activando membresía...' : '✅ Confirmar y Activar Membresía'}
+                              </Button>
+                              <Button
+                                type="button"
                                 variant="ghost"
                                 size="sm"
                                 onClick={handleCancelEmbeddedCheckout}
-                                className="text-xs text-muted-foreground h-7"
+                                className="text-muted-foreground mt-2"
                               >
-                                <X size={14} className="mr-1" /> Cancelar
+                                Cancelar
                               </Button>
                             </div>
-                            {/* Iframe embebido de Recurrente */}
-                            <RecurrenteCheckoutEmbed
-                              checkoutUrl={checkoutUrl!}
-                              onSuccess={(paymentData) => {
-                                console.log('[Recurrente] ✅ Pago exitoso:', paymentData);
-                                toast.success('✅ Pago completado exitosamente');
-                                setWaitingPayment(false);
-                                onSuccess();
-                                handleClose();
-                              }}
-                              onFailure={(error) => {
-                                const msg = error?.message ?? error?.notice ?? 'El pago fue rechazado';
-                                console.warn('[Recurrente] ❌ Pago fallido:', error);
-                                if (error?.type === 'notice' || error?.notice) {
-                                  toast.warning(msg);
-                                } else {
-                                  toast.error(`Pago rechazado: ${msg}`);
-                                }
-                              }}
-                              onPaymentInProgress={() => {
-                                console.log('[Recurrente] ⏳ Pago por transferencia en proceso');
-                                toast.info('Pago por transferencia bancaria en proceso. Recibirás confirmación en tu correo.');
-                                setWaitingPayment(false);
-                                onSuccess();
-                                handleClose();
-                              }}
-                              height="550px"
-                            />
                           </div>
                         )}
                       </div>
                     )}
 
                     {autoRenew && (
-                      <Card className="bg-primary/5 border-primary/20">
+                      <Card className="bg-primary/5 border-primary/20 mt-3">
                         <CardContent className="p-4">
                           <div className="flex items-start gap-3">
                             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -905,6 +964,57 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
                           </div>
                         </CardContent>
                       </Card>
+                    )}
+
+                    {paymentMethod === 'TRANSFER' && (
+                      <div className="space-y-4 p-4 border rounded-lg bg-muted/20 mt-4">
+                        <h4 className="font-semibold text-sm">Datos de Transferencia</h4>
+                        <div className="space-y-2">
+                          <Label htmlFor="transferDate">Fecha de Boleta / Transferencia</Label>
+                          <Input
+                            id="transferDate"
+                            type="date"
+                            value={transferDate}
+                            onChange={(e) => setTransferDate(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="reference">Número de Referencia / Boleta *</Label>
+                          <Input
+                            id="reference"
+                            value={paymentReference}
+                            onChange={(e) => setPaymentReference(e.target.value)}
+                            placeholder="Ej. 120491823"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="transferDocument">Comprobante / Boleta (Opcional)</Label>
+                          <Input
+                            id="transferDocument"
+                            type="file"
+                            accept="image/*,.pdf"
+                            onChange={handleDocumentUpload}
+                          />
+                          {transferDocument && (
+                            <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                              <Check size={12} /> Documento adjuntado
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {paymentMethod !== 'TRANSFER' && paymentMethod !== 'RECURRENTE' && (
+                      <div className="space-y-2 mt-4">
+                        <Label htmlFor="reference">Referencia (Opcional)</Label>
+                        <Input
+                          id="reference"
+                          value={paymentReference}
+                          onChange={(e) => setPaymentReference(e.target.value)}
+                          placeholder="Número de transacción o recibo"
+                        />
+                      </div>
                     )}
                   </>
                 )}

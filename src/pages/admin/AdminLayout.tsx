@@ -1,22 +1,30 @@
+import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from '@/components/Sidebar';
 import { Topbar } from '@/components/Topbar';
-import { DevContinueButton } from '@/components/DevContinueButton';
+import { HelpChatbot } from '@/components/HelpChatbot';
 
 export function AdminLayout() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
     <div className="h-screen flex overflow-hidden">
-      <Sidebar />
+      {/* Desktop sidebar */}
+      <Sidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Topbar />
+      {/* Main content */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <Topbar onMenuToggle={() => setSidebarOpen(true)} />
 
         <main className="flex-1 overflow-y-auto bg-background">
           <Outlet />
         </main>
       </div>
 
-      <DevContinueButton />
+      <HelpChatbot />
     </div>
   );
 }

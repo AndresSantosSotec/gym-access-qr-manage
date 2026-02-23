@@ -13,7 +13,7 @@
  *   />
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect } from 'react';
 
 interface RecurrenteCheckoutEmbedProps {
   /** URL del checkout de Recurrente (checkout_url del backend) */
@@ -38,73 +38,52 @@ export function RecurrenteCheckoutEmbed({
   height = '850px',
   className = '',
 }: RecurrenteCheckoutEmbedProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const listenerRef = useRef<((event: MessageEvent) => void) | null>(null);
 
-  const handleMessage = useCallback(
-    (event: MessageEvent) => {
-      // Solo aceptar mensajes de Recurrente
-      if (event.origin !== 'https://app.recurrente.com') return;
-
-      if (event.data?.type === 'recurrente-plugin:payment-success') {
-        console.log('[RecurrenteCheckout] Pago exitoso:', event.data);
-        onSuccess?.(event.data);
-      } else if (event.data?.type === 'recurrente-plugin:payment-failed') {
-        console.log('[RecurrenteCheckout] Pago fallido:', event.data);
-        onFailure?.(event.data);
-      } else if (event.data?.type === 'recurrente-plugin:payment-in-progress') {
-        console.log('[RecurrenteCheckout] Pago en proceso:', event.data);
-        onPaymentInProgress?.(event.data);
-      }
-    },
-    [onSuccess, onFailure, onPaymentInProgress],
-  );
+  // 1. Asegurarnos que la URL lleve el flag embed=true
+  const embedUrl = checkoutUrl
+    ? (checkoutUrl.includes('embed=true') ? checkoutUrl : `${checkoutUrl}${checkoutUrl.includes('?') ? '&' : '?'}embed=true`)
+    : '';
 
   useEffect(() => {
-    if (!checkoutUrl || !containerRef.current) return;
+    if (!embedUrl) return;
 
-    // Limpiar listener anterior si existe
-    if (listenerRef.current) {
-      window.removeEventListener('message', listenerRef.current);
-    }
+    // 2. Escuchar los eventos postMessage que emite el iframe de Recurrente
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== 'https://app.recurrente.com') return;
 
-    // Registrar nuevo listener
-    listenerRef.current = handleMessage;
-    window.addEventListener('message', handleMessage);
+      const data = event.data;
+      if (!data) return;
 
-    // Construir URL con embed=true
-    let iframeSrc = checkoutUrl;
-    if (!iframeSrc.includes('embed=true')) {
-      const separator = iframeSrc.includes('?') ? '&' : '?';
-      iframeSrc = `${iframeSrc}${separator}embed=true`;
-    }
-
-    // Crear iframe
-    const iframe = document.createElement('iframe');
-    iframe.id = 'recurrente-checkout-iframe';
-    iframe.src = iframeSrc;
-    iframe.style.cssText = `width: 100%; height: ${height}; border: none; overflow: hidden; border-radius: 12px;`;
-    iframe.allow = 'payment';
-    iframe.title = 'Recurrente Checkout';
-
-    // Limpiar y agregar
-    containerRef.current.innerHTML = '';
-    containerRef.current.appendChild(iframe);
-
-    return () => {
-      if (listenerRef.current) {
-        window.removeEventListener('message', listenerRef.current);
-        listenerRef.current = null;
+      if (data.type === 'recurrente-plugin:payment-success') {
+        console.log('[RecurrenteEmbed] Pago exitoso:', data);
+        onSuccess?.(data);
+      } else if (data.type === 'recurrente-plugin:payment-failed') {
+        console.log('[RecurrenteEmbed] Pago fallido:', data);
+        onFailure?.(data);
+      } else if (data.type === 'recurrente-plugin:payment-in-progress') {
+        console.log('[RecurrenteEmbed] Pago en proceso:', data);
+        onPaymentInProgress?.(data);
       }
     };
-  }, [checkoutUrl, handleMessage, height]);
+
+    window.addEventListener('message', handleMessage);
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, [embedUrl, onSuccess, onFailure, onPaymentInProgress]);
+
+  if (!embedUrl) return null;
 
   return (
-    <div
-      ref={containerRef}
-      id="recurrente-checkout-container"
-      className={`w-full ${className}`}
-      style={{ minHeight: height }}
-    />
+    <div className={`w-full overflow-hidden ${className}`}>
+      <iframe
+        title="Recurrente Checkout"
+        src={embedUrl}
+        className="w-full border-0 overflow-hidden select-none"
+        style={{ minHeight: height }}
+        allow="payment *"
+      />
+    </div>
   );
 }

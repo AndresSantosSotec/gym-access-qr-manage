@@ -32,6 +32,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function SalesHistory() {
     const [sales, setSales] = useState<Venta[]>([]);
@@ -211,10 +212,32 @@ export function SalesHistory() {
                 </CardHeader>
                 <CardContent>
                     {isLoading ? (
-                        <div className="h-40 flex items-center justify-center">
-                            <ArrowsClockwise className="animate-spin text-primary mr-2" size={24} />
-                            Cargando transacciones...
-                        </div>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>No. Orden</TableHead>
+                                    <TableHead>Fecha</TableHead>
+                                    <TableHead>Cliente</TableHead>
+                                    <TableHead>Total</TableHead>
+                                    <TableHead>Estado</TableHead>
+                                    <TableHead>Recibo</TableHead>
+                                    <TableHead>Acciones</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {Array.from({ length: 5 }).map((_, index) => (
+                                    <TableRow key={index}>
+                                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                                        <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
+                                        <TableCell><Skeleton className="h-8 w-16" /></TableCell>
+                                        <TableCell><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
                     ) : (
                         <Table>
                             <TableHeader>

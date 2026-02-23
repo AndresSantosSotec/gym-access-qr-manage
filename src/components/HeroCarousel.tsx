@@ -49,7 +49,7 @@ export function HeroCarousel({ images, autoPlayInterval = 5000, className = '' }
     return (
       <div className={`relative w-full h-[500px] bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center ${className}`}>
         <div className="text-center text-muted-foreground">
-          <p className="text-xl font-semibold">¡Bienvenido a GymFlow!</p>
+          <p className="text-xl font-semibold">¡Bienvenido a IronGym!</p>
           <p className="text-sm mt-2">Configura imágenes hero desde el panel de administración</p>
         </div>
       </div>

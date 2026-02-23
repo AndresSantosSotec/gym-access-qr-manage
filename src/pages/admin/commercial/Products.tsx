@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function Products() {
     const navigate = useNavigate();
@@ -143,7 +144,38 @@ export function Products() {
                 </CardHeader>
                 <CardContent>
                     {isLoading ? (
-                        <div className="h-40 flex items-center justify-center">Cargando catálogo...</div>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-[80px]">Imagen</TableHead>
+                                    <TableHead>Producto</TableHead>
+                                    <TableHead>Marca / Pres.</TableHead>
+                                    <TableHead>Precio Venta</TableHead>
+                                    <TableHead>Stock</TableHead>
+                                    <TableHead className="text-right">Acciones</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {Array.from({ length: 5 }).map((_, index) => (
+                                    <TableRow key={index}>
+                                        <TableCell><Skeleton className="h-10 w-10 rounded" /></TableCell>
+                                        <TableCell>
+                                            <Skeleton className="h-4 w-32 mb-1" />
+                                            <Skeleton className="h-3 w-24" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex gap-1">
+                                                <Skeleton className="h-5 w-16 rounded-full" />
+                                                <Skeleton className="h-5 w-16 rounded-full" />
+                                            </div>
+                                        </TableCell>
+                                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                                        <TableCell><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
+                                        <TableCell><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
                     ) : (
                         <Table>
                             <TableHeader>

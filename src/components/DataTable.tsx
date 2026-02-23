@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { CaretLeft, CaretRight, CaretDoubleLeft, CaretDoubleRight } from '@phosphor-icons/react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export interface ColumnDef<T> {
   header: string;
@@ -31,22 +32,24 @@ interface DataTableProps<T> {
   onRowClick?: (item: T) => void;
   pageSizeOptions?: number[];
   emptyMessage?: string;
+  isLoading?: boolean;
 }
 
-export function DataTable<T>({ 
-  data, 
-  columns, 
+export function DataTable<T>({
+  data,
+  columns,
   onRowClick,
   pageSizeOptions = [10, 15, 20, 100],
-  emptyMessage = "No se encontraron resultados."
+  emptyMessage = "No se encontraron resultados.",
+  isLoading = false
 }: DataTableProps<T>) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<number | 'all'>(pageSizeOptions[0]);
 
   const totalPages = pageSize === 'all' ? 1 : Math.ceil(data.length / pageSize);
-  
-  const paginatedData = pageSize === 'all' 
-    ? data 
+
+  const paginatedData = pageSize === 'all'
+    ? data
     : data.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const handlePageChange = (page: number) => {
@@ -78,7 +81,17 @@ export function DataTable<T>({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedData.length === 0 ? (
+            {isLoading ? (
+              Array.from({ length: typeof pageSize === 'number' ? Math.min(pageSize, 5) : 5 }).map((_, rowIndex) => (
+                <TableRow key={`skeleton-${rowIndex}`}>
+                  {columns.map((column, colIndex) => (
+                    <TableCell key={colIndex} className={column.className}>
+                      <Skeleton className="h-6 w-full" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : paginatedData.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
                   {emptyMessage}
@@ -86,16 +99,16 @@ export function DataTable<T>({
               </TableRow>
             ) : (
               paginatedData.map((item, rowIndex) => (
-                <TableRow 
-                  key={rowIndex} 
+                <TableRow
+                  key={rowIndex}
                   onClick={() => onRowClick?.(item)}
                   className={onRowClick ? 'cursor-pointer hover:bg-muted/50 transition-colors' : ''}
                 >
                   {columns.map((column, colIndex) => (
                     <TableCell key={colIndex} className={column.className}>
-                      {column.cell 
-                        ? column.cell(item) 
-                        : column.accessorKey 
+                      {column.cell
+                        ? column.cell(item)
+                        : column.accessorKey
                           ? (item[column.accessorKey as keyof T] as React.ReactNode)
                           : null}
                     </TableCell>

@@ -44,6 +44,7 @@ import {
   IdentificationCard,
   Calendar,
   CheckCircle,
+  Check,
   XCircle,
   Camera,
   Fingerprint,
@@ -56,6 +57,8 @@ import {
   PencilSimple,
 } from '@phosphor-icons/react';
 import type { Client, EconomicProfileItem, MembershipPlan } from '@/types/models';
+import { recurrenteService } from '@/services/recurrente.service';
+import { RecurrenteCheckoutEmbed } from '@/components/RecurrenteCheckoutEmbed';
 
 export function ClientDetail() {
   const { id } = useParams<{ id: string }>();
@@ -70,12 +73,16 @@ export function ClientDetail() {
   const [isWebcamOpen, setIsWebcamOpen] = useState(false);
   const [editingEconomicItem, setEditingEconomicItem] = useState<EconomicProfileItem | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'TRANSFER'>('CASH');
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'RECURRENTE'>('CASH');
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [waitingPayment, setWaitingPayment] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentType, setPaymentType] = useState<'single' | 'installments'>('single');
   const [numInstallments, setNumInstallments] = useState('3');
   const [initialPayment, setInitialPayment] = useState('');
+  const [transferDate, setTransferDate] = useState(new Date().toISOString().split('T')[0]);
+  const [transferDocument, setTransferDocument] = useState<string>('');
   const [isAssigning, setIsAssigning] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [economicItems, setEconomicItems] = useState<EconomicProfileItem[]>([]);
@@ -105,11 +112,8 @@ export function ClientDetail() {
     if (client) {
       const loadRelatedData = async () => {
         try {
-          const [logs, clientPayments] = await Promise.all([
-            accessService.getLogsByClient(client.id),
-            membershipsService.getPaymentsByClient(client.id)
-          ]);
-          setAccessLogs(logs);
+          // Access logs deshabilitados temporalmente (ROADMAP FUTURO)
+          const clientPayments = await membershipsService.getPaymentsByClient(client.id);
           setPayments(clientPayments);
         } catch (e) {
           console.error(e);
@@ -303,23 +307,56 @@ export function ClientDetail() {
       return;
     }
 
+    if (paymentMethod === 'RECURRENTE') {
+      try {
+        setIsAssigning(true);
+        const { checkout_url } = await recurrenteService.createCheckout(
+          Number(client.id),
+          parseInt(selectedPlanId, 10),
+          `${window.location.origin}/p/pago-exitoso?client_id=${client.id}`,
+          `${window.location.origin}/p/pago-fallido`,
+        );
+        if (!checkout_url) throw new Error('No se recibió URL de checkout de Recurrente.');
+
+        setCheckoutUrl(checkout_url);
+        setWaitingPayment(true);
+        setIsAssigning(false);
+      } catch (err: any) {
+        setIsAssigning(false);
+        toast.error(err?.response?.data?.message || err.message || 'Error al iniciar checkout en Recurrente');
+      }
+      return;
+    }
+
+    await finalizeAssignMembership(paymentMethod);
+  };
+
+  const finalizeAssignMembership = async (method: 'CASH' | 'CARD' | 'TRANSFER' | 'RECURRENTE') => {
+    if (!client || !selectedPlanId) return;
     const amount = parseFloat(paymentAmount);
-    if (paymentType === 'single' && (!amount || amount <= 0)) {
+    if (paymentType === 'single' && (!amount || amount <= 0) && method !== 'RECURRENTE') {
       toast.error('Ingresa un monto válido');
       return;
     }
 
     setIsAssigning(true);
+    const finalReference = paymentMethod === 'TRANSFER' && transferDate
+      ? `${paymentReference} (Fecha: ${transferDate})`
+      : (paymentReference || undefined);
+
     try {
+
       const result = await membershipsService.assignMembership(
         client.id,
         selectedPlanId,
-        paymentMethod,
+        method === 'RECURRENTE' ? 'CARD' : method,
         paymentType === 'single' ? amount : 0,
-        paymentReference || undefined,
+        finalReference,
         paymentType,
         paymentType === 'installments' ? parseInt(numInstallments) : undefined,
         paymentType === 'installments' && initialPayment ? parseFloat(initialPayment) : undefined,
+        undefined, // inscriptionFee
+        paymentMethod === 'TRANSFER' && transferDocument ? transferDocument : undefined
       );
 
       const updatedClient = await clientsService.getById(client.id);
@@ -331,6 +368,9 @@ export function ClientDetail() {
       setPaymentType('single');
       setNumInstallments('3');
       setInitialPayment('');
+      setCheckoutUrl(null);
+      setWaitingPayment(false);
+      setTransferDocument('');
       toast.success(result.message || 'Membresía asignada exitosamente');
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Error al asignar membresía');
@@ -1070,13 +1110,67 @@ export function ClientDetail() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="CASH">Efectivo</SelectItem>
-                  <SelectItem value="CARD">Tarjeta</SelectItem>
-                  <SelectItem value="TRANSFER">Transferencia</SelectItem>
+                  <SelectItem value="CARD">Tarjeta (Local - No Recurrente)</SelectItem>
+                  <SelectItem value="TRANSFER">Transferencia Bancaria</SelectItem>
+                  <SelectItem value="RECURRENTE">Tarjeta Crédito / En línea (Recurrente)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            {paymentType === 'single' ? (
+            {paymentMethod === 'RECURRENTE' && checkoutUrl ? (
+              <div className="border rounded-lg p-5 text-center bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 mt-4">
+                <CreditCard size={32} className="text-blue-600 mx-auto mb-2" />
+                <h4 className="font-semibold text-lg text-blue-900 dark:text-blue-100 mb-2">Enlace de Pago Generado</h4>
+                <p className="text-sm text-blue-800 dark:text-blue-200 mb-4">
+                  Abre la pasarela de Recurrente en una nueva pestaña para que el cliente ingrese su tarjeta.
+                </p>
+                <div className="flex flex-col gap-3">
+                  <Button
+                    type="button"
+                    onClick={() => window.open(checkoutUrl, '_blank')}
+                    className="w-full bg-blue-600 hover:bg-blue-700"
+                    size="lg"
+                  >
+                    Abrir Pasarela de Pago
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(checkoutUrl);
+                      toast.success('Enlace copiado al portapapeles');
+                    }}
+                  >
+                    Copiar Enlace
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      toast.success('Una vez el cliente pague, la membresía se activará automáticamente');
+                      finalizeAssignMembership('RECURRENTE');
+                    }}
+                  >
+                    Ya completó el pago
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setWaitingPayment(false); setCheckoutUrl(null); }}
+                    className="text-muted-foreground"
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            ) : paymentMethod === 'RECURRENTE' ? (
+              <div className="p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg text-sm text-blue-800 dark:text-blue-200 mt-2">
+                Haz clic en "Pagar con Tarjeta" para generar el enlace de pago seguro de Recurrente.
+              </div>
+            ) : null}
+
+            {paymentMethod !== 'RECURRENTE' && paymentType === 'single' ? (
               <div className="space-y-2">
                 <Label htmlFor="amount">Monto Pagado (Q)</Label>
                 <Input
@@ -1122,7 +1216,7 @@ export function ClientDetail() {
                   const cuotaMonto = plan.price;
                   const total = cuotaMonto * parseInt(numInstallments);
                   return (
-                    <div className="rounded-lg border bg-muted/50 p-3 space-y-1">
+                    <div className="rounded-lg border bg-muted/50 p-3 space-y-1 mt-2">
                       <p className="text-sm font-semibold">Vista Previa del Plan</p>
                       <div className="text-xs space-y-1">
                         <div className="flex justify-between">
@@ -1144,22 +1238,75 @@ export function ClientDetail() {
               </>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="reference">Referencia (Opcional)</Label>
-              <Input
-                id="reference"
-                value={paymentReference}
-                onChange={(e) => setPaymentReference(e.target.value)}
-                placeholder="Número de transacción o recibo"
-              />
-            </div>
+            {paymentMethod === 'TRANSFER' && (
+              <div className="space-y-4 p-4 border rounded-lg bg-accent/20">
+                <h4 className="font-semibold text-sm">Datos de Transferencia</h4>
+                <div className="space-y-2">
+                  <Label htmlFor="transferDate">Fecha de Boleta / Transferencia</Label>
+                  <Input
+                    type="date"
+                    id="transferDate"
+                    value={transferDate}
+                    onChange={(e) => setTransferDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reference">Número de Referencia / Boleta *</Label>
+                  <Input
+                    id="reference"
+                    value={paymentReference}
+                    onChange={(e) => setPaymentReference(e.target.value)}
+                    placeholder="Ej. AB01239"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="transferDocument">Comprobante / Boleta (Opcional)</Label>
+                  <Input
+                    id="transferDocument"
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+                        toast.error('Solo se permiten imágenes o PDF');
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onload = () => setTransferDocument(reader.result as string);
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                  {transferDocument && (
+                    <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                      <Check size={12} /> Documento adjuntado
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {paymentMethod !== 'TRANSFER' && paymentMethod !== 'RECURRENTE' && (
+              <div className="space-y-2">
+                <Label htmlFor="reference">Referencia (Opcional)</Label>
+                <Input
+                  id="reference"
+                  value={paymentReference}
+                  onChange={(e) => setPaymentReference(e.target.value)}
+                  placeholder="Número de transacción o recibo"
+                />
+              </div>
+            )}
             <div className="flex gap-2 pt-4">
               <Button type="button" variant="outline" onClick={() => setIsMembershipDialogOpen(false)} className="flex-1">
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isAssigning} className="flex-1">
-                {isAssigning ? 'Procesando...' : paymentType === 'single' ? 'Asignar y Pagar' : `Asignar con ${numInstallments} Cuotas`}
-              </Button>
+              {paymentMethod !== 'RECURRENTE' || !waitingPayment ? (
+                <Button type="submit" disabled={isAssigning} className="flex-1">
+                  {isAssigning ? 'Procesando...' : paymentMethod === 'RECURRENTE' ? 'Pagar con Tarjeta' : paymentType === 'single' ? 'Asignar y Pagar' : `Asignar con ${numInstallments} Cuotas`}
+                </Button>
+              ) : null}
             </div>
           </form>
         </DialogContent>

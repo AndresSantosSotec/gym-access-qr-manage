@@ -50,7 +50,7 @@ export function QrPass() {
                 <Barbell size={28} weight="bold" />
               </div>
               <div>
-                <h1 className="text-xl font-bold">GymFlow</h1>
+                <h1 className="text-xl font-bold">IronGym</h1>
                 <p className="text-sm opacity-90">Pase Digital</p>
               </div>
             </div>

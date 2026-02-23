@@ -1,4 +1,4 @@
-# GymFlow - Sistema de Gestión de Membresías
+# IronGym - Sistema de Gestión de Membresías
 
 Sistema completo de gestión de membresías y control de acceso por QR para gimnasios y clubes deportivos.
 

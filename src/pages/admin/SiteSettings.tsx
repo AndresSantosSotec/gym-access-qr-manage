@@ -466,7 +466,7 @@ export function SiteSettings() {
                     id="gymName"
                     value={config.gymName}
                     onChange={(e) => setConfig({ ...config, gymName: e.target.value })}
-                    placeholder="GymFlow"
+                    placeholder="IronGym"
                   />
                 </div>
                 <div className="space-y-2">
@@ -521,7 +521,7 @@ export function SiteSettings() {
                     id="instagram"
                     value={config.instagram}
                     onChange={(e) => setConfig({ ...config, instagram: e.target.value })}
-                    placeholder="@gymflow_gt"
+                    placeholder="@irongym_gt"
                   />
                 </div>
               </CardContent>
@@ -646,7 +646,7 @@ export function SiteSettings() {
                 <div className="border rounded-lg overflow-hidden shadow-sm" style={{ fontFamily: publicTheme.font }}>
                   {/* Fake Navbar */}
                   <div className="h-12 border-b flex items-center px-4 justify-between" style={{ backgroundColor: publicTheme.colors?.background, borderColor: publicTheme.colors?.border }}>
-                    <span className="font-bold text-lg" style={{ color: publicTheme.colors?.foreground }}>GymFlow</span>
+                    <span className="font-bold text-lg" style={{ color: publicTheme.colors?.foreground }}>IronGym</span>
                     <div className="flex gap-2">
                       <div className="h-2 w-8 rounded bg-gray-200"></div>
                       <div className="h-2 w-8 rounded bg-gray-200"></div>

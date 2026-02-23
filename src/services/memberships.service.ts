@@ -168,6 +168,7 @@ export const membershipsService = {
     numInstallments?: number,
     initialPayment?: number,
     inscriptionFee?: number,
+    documentBase64?: string,
   ) => {
     const response = await api.post('/memberships/assign', {
       client_id: clientId,
@@ -179,6 +180,7 @@ export const membershipsService = {
       num_installments: numInstallments,
       initial_payment: initialPayment,
       inscription_fee: inscriptionFee,
+      document_base64: documentBase64,
     });
     return response.data;
   },
@@ -212,12 +214,14 @@ export const membershipsService = {
     paymentMethod: string,
     reference?: string,
     notes?: string,
+    documentBase64?: string,
   ) => {
     const response = await api.post(`/installments/${installmentId}/pay`, {
       amount,
       payment_method: paymentMethod,
       reference,
       notes,
+      document_base64: documentBase64,
     });
     return response.data;
   },

@@ -1,8 +1,8 @@
 import { storage } from '@/utils/storage';
 import type { InventoryProduct, InventoryMovement } from '@/types/models';
 
-const PRODUCTS_KEY = 'gymflow_inventory_products';
-const MOVEMENTS_KEY = 'gymflow_inventory_movements';
+const PRODUCTS_KEY = 'irongym_inventory_products';
+const MOVEMENTS_KEY = 'irongym_inventory_movements';
 
 export const inventoryService = {
   getAllProducts: (): InventoryProduct[] => {

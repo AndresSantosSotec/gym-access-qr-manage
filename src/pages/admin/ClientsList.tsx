@@ -232,6 +232,7 @@ export function ClientsList() {
           <DataTable
             data={clients}
             columns={columns}
+            isLoading={loading}
             emptyMessage={searchQuery ? 'No se encontraron clientes para tu búsqueda' : 'No hay clientes registrados'}
           />
         </CardContent>

@@ -1,7 +1,7 @@
 import { storage } from '@/utils/storage';
 import type { CashMovement } from '@/types/models';
 
-const CASH_KEY = 'gymflow_cash_movements';
+const CASH_KEY = 'irongym_cash_movements';
 
 export const cashService = {
   getAllMovements: (): CashMovement[] => {

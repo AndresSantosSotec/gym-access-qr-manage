@@ -1,8 +1,8 @@
-# GymFlow - Extensión v3.0 - IMPLEMENTACIÓN COMPLETA
+# IronGym - Extensión v3.0 - IMPLEMENTACIÓN COMPLETA
 
 ## 📋 RESUMEN EJECUTIVO
 
-Este documento describe las extensiones implementadas al sistema GymFlow conforme a los requisitos solicitados.
+Este documento describe las extensiones implementadas al sistema IronGym conforme a los requisitos solicitados.
 
 ### ✅ CAMBIOS IMPLEMENTADOS
 

@@ -31,6 +31,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface CartItem {
     id: number;
@@ -217,37 +218,58 @@ export function Sales() {
                         </div>
                     </CardHeader>
                     <CardContent className="flex-1 overflow-y-auto p-4 pt-2">
-                        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            {filteredProducts.map(product => (
-                                <button
-                                    key={product.id}
-                                    onClick={() => addToCart(product)}
-                                    disabled={product.stock <= 0 && saleType === 'PAGADA'}
-                                    className={cn(
-                                        "group relative flex flex-col text-left p-4 rounded-xl border bg-background hover:border-primary hover:shadow-md transition-all",
-                                        product.stock <= 0 && saleType === 'PAGADA' && "opacity-50 cursor-not-allowed"
-                                    )}
-                                >
-                                    <div className="mb-2">
-                                        <Badge variant="outline" className="mb-1">{product.marca?.nombre || 'General'}</Badge>
-                                        <h3 className="font-bold text-sm leading-tight line-clamp-2 min-h-[2.5rem]">{product.nombre}</h3>
-                                    </div>
-                                    <div className="mt-auto flex items-center justify-between">
-                                        <span className="text-lg font-black text-primary">Q{Number(product.precio_venta).toFixed(0)}</span>
-                                        <Badge variant={product.stock > 5 ? 'secondary' : 'destructive'} className="text-[10px]">
-                                            {product.stock} disp.
-                                        </Badge>
-                                    </div>
-                                    {product.stock > 0 && (
-                                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <div className="bg-primary text-white p-1 rounded-full">
-                                                <Plus size={16} weight="bold" />
-                                            </div>
+                        {isLoading ? (
+                            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                {Array.from({ length: 8 }).map((_, i) => (
+                                    <div key={i} className="p-4 rounded-xl border space-y-3 bg-card">
+                                        <Skeleton className="h-6 w-20 rounded-full mb-1" />
+                                        <Skeleton className="h-4 w-full" />
+                                        <Skeleton className="h-4 w-3/4" />
+                                        <div className="flex justify-between items-center pt-2 mt-auto">
+                                            <Skeleton className="h-6 w-16" />
+                                            <Skeleton className="h-4 w-12" />
                                         </div>
-                                    )}
-                                </button>
-                            ))}
-                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                {filteredProducts.map(product => (
+                                    <button
+                                        key={product.id}
+                                        onClick={() => addToCart(product)}
+                                        disabled={product.stock <= 0 && saleType === 'PAGADA'}
+                                        className={cn(
+                                            "group relative flex flex-col text-left p-4 rounded-xl border bg-background hover:border-primary hover:shadow-md transition-all",
+                                            product.stock <= 0 && saleType === 'PAGADA' && "opacity-50 cursor-not-allowed"
+                                        )}
+                                    >
+                                        <div className="mb-2">
+                                            <Badge variant="outline" className="mb-1">{product.marca?.nombre || 'General'}</Badge>
+                                            <h3 className="font-bold text-sm leading-tight line-clamp-2 min-h-[2.5rem]">{product.nombre}</h3>
+                                        </div>
+                                        <div className="mt-auto flex items-center justify-between">
+                                            <span className="text-lg font-black text-primary">Q{Number(product.precio_venta).toFixed(0)}</span>
+                                            <Badge variant={product.stock > 5 ? 'secondary' : 'destructive'} className="text-[10px]">
+                                                {product.stock} disp.
+                                            </Badge>
+                                        </div>
+                                        {product.stock > 0 && (
+                                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div className="bg-primary text-white p-1 rounded-full">
+                                                    <Plus size={16} weight="bold" />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </button>
+                                ))}
+                                {filteredProducts.length === 0 && (
+                                    <div className="col-span-full py-12 text-center text-muted-foreground">
+                                        No se encontraron productos
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>

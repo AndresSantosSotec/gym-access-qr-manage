@@ -29,6 +29,7 @@ import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function Inventory() {
     const [products, setProducts] = useState<Producto[]>([]);
@@ -197,48 +198,73 @@ export function Inventory() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Fecha</TableHead>
-                                <TableHead>Tipo</TableHead>
-                                <TableHead>Producto</TableHead>
-                                <TableHead>Cant.</TableHead>
-                                <TableHead>Motivo</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {filteredMovements.map((move) => (
-                                <TableRow key={move.id}>
-                                    <TableCell className="text-xs">
-                                        {format(new Date(move.created_at), "dd/MM/yyyy HH:mm")}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant={move.tipo === 'INGRESO' ? 'secondary' : 'destructive'} className="gap-1">
-                                            {move.tipo === 'INGRESO' ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
-                                            {move.tipo}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="font-medium">
-                                        {move.producto?.nombre || 'Producto no encontrado'}
-                                    </TableCell>
-                                    <TableCell className="font-bold">
-                                        {move.cantidad}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground text-sm">
-                                        {move.motivo}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                            {filteredMovements.length === 0 && (
+                    {isLoading ? (
+                        <Table>
+                            <TableHeader>
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                                        No hay movimientos registrados
-                                    </TableCell>
+                                    <TableHead>Fecha</TableHead>
+                                    <TableHead>Tipo</TableHead>
+                                    <TableHead>Producto</TableHead>
+                                    <TableHead>Cant.</TableHead>
+                                    <TableHead>Motivo</TableHead>
                                 </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+                            </TableHeader>
+                            <TableBody>
+                                {Array.from({ length: 5 }).map((_, index) => (
+                                    <TableRow key={index}>
+                                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                                        <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
+                                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                                        <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                                        <TableCell><Skeleton className="h-4 w-48" /></TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Fecha</TableHead>
+                                    <TableHead>Tipo</TableHead>
+                                    <TableHead>Producto</TableHead>
+                                    <TableHead>Cant.</TableHead>
+                                    <TableHead>Motivo</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {filteredMovements.map((move) => (
+                                    <TableRow key={move.id}>
+                                        <TableCell className="text-xs">
+                                            {format(new Date(move.created_at), "dd/MM/yyyy HH:mm")}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant={move.tipo === 'INGRESO' ? 'secondary' : 'destructive'} className="gap-1">
+                                                {move.tipo === 'INGRESO' ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+                                                {move.tipo}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="font-medium">
+                                            {move.producto?.nombre || 'Producto no encontrado'}
+                                        </TableCell>
+                                        <TableCell className="font-bold">
+                                            {move.cantidad}
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground text-sm">
+                                            {move.motivo}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                                {filteredMovements.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                                            No hay movimientos registrados
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    )}
                 </CardContent>
             </Card>
 

@@ -32,12 +32,12 @@ export const siteService = {
 
   getDefaultConfig: (): SiteConfig => {
     return {
-      gymName: 'GymFlow',
+      gymName: 'IronGym',
       slogan: 'Tu mejor versión te espera',
       aboutText: 'Somos un gimnasio moderno y completo, dedicado a ayudarte a alcanzar tus metas de fitness. Con equipamiento de última generación y entrenadores certificados.',
       phone: '+502 1234-5678',
       whatsapp: '+502 1234-5678',
-      instagram: '@gymflow',
+      instagram: '@irongym',
       primaryColor: 'oklch(0.65 0.25 285)',
       heroImages: [],
       themeColors: {

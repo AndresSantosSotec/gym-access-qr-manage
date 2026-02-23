@@ -95,9 +95,57 @@ body {
   font-family: var(--font-sans);
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: var(--font-heading);
   letter-spacing: -0.02em;
+}
+
+/* ── Responsive utilities ─────────────────────────────────────────────── */
+
+/* Tables scroll horizontally on small screens */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent content from going under mobile browser chrome */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Better touch targets */
+@media (max-width: 640px) {
+
+  button,
+  [role="button"] {
+    min-height: 40px;
+  }
+
+  /* Page padding mobile */
+  .page-content {
+    padding: 1rem;
+  }
+
+  /* Dialogs use more screen on mobile */
+  [data-radix-dialog-content] {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    max-height: 90vh !important;
+    margin: 0 auto;
+  }
+}
+
+/* Safe area insets (iOS notch) */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .fixed-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }
 
 .btn-primary {
@@ -110,6 +158,7 @@ h1, h2, h3, h4, h5, h6 {
     opacity: 0;
     transform: translateY(30px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -120,6 +169,7 @@ h1, h2, h3, h4, h5, h6 {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -130,6 +180,7 @@ h1, h2, h3, h4, h5, h6 {
     opacity: 0;
     transform: translateX(50px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -141,6 +192,7 @@ h1, h2, h3, h4, h5, h6 {
     opacity: 0;
     transform: translateX(-50px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -152,6 +204,7 @@ h1, h2, h3, h4, h5, h6 {
     opacity: 0;
     transform: scale(0.9);
   }
+
   to {
     opacity: 1;
     transform: scale(1);

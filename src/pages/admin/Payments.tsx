@@ -40,15 +40,18 @@ import {
   CalendarBlank,
   Warning,
   CheckCircle,
+  Check,
   ArrowsClockwise,
   CurrencyCircleDollar,
   Receipt,
   Download,
   MagnifyingGlass,
   Printer,
+  FileText,
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { PaymentInstallment } from '@/types/models';
 
 // ─── Helpers ───
@@ -169,8 +172,43 @@ function InstallmentsTab() {
     payment_method: 'cash',
     reference: '',
     notes: '',
+    transferDate: new Date().toISOString().split('T')[0],
+    transferDocument: '',
   });
   const [isPaying, setIsPaying] = useState(false);
+
+  // Recurrente checkout link state
+  const [recurrenteCheckoutUrl, setRecurrenteCheckoutUrl] = useState<string | null>(null);
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+
+  const generateRecurrenteLink = async () => {
+    if (!selectedInstallment?.membership?.plan_id && !selectedInstallment?.membership?.membership_plan_id) {
+      toast.error('Esta cuota no tiene plan de Recurrente asociado');
+      return;
+    }
+    setIsGeneratingLink(true);
+    try {
+      const planId = selectedInstallment?.membership?.plan_id
+        ?? selectedInstallment?.membership?.membership_plan_id;
+      const clientId = selectedInstallment.client_id;
+      const { data } = await import('@/services/api.service').then(m =>
+        m.api.post('/recurrente/checkout', {
+          client_id: clientId,
+          plan_id: planId,
+          success_url: `${window.location.origin}/p/pago-exitoso?client_id=${clientId}`,
+          cancel_url: `${window.location.origin}/p/pago-fallido`,
+        })
+      );
+      if (!data.checkout_url) throw new Error('No se recibio URL de checkout');
+      setRecurrenteCheckoutUrl(data.checkout_url);
+      window.open(data.checkout_url, '_blank');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? err?.response?.data?.error ?? err.message;
+      toast.error(msg || 'No se pudo generar el link de Recurrente');
+    } finally {
+      setIsGeneratingLink(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -208,7 +246,10 @@ function InstallmentsTab() {
       payment_method: 'cash',
       reference: '',
       notes: '',
+      transferDate: new Date().toISOString().split('T')[0],
+      transferDocument: '',
     });
+    setRecurrenteCheckoutUrl(null);
     setPayDialogOpen(true);
   };
 
@@ -216,12 +257,17 @@ function InstallmentsTab() {
     if (!selectedInstallment || !payForm.amount) return;
     setIsPaying(true);
     try {
+      const finalReference = payForm.payment_method === 'transfer' && payForm.transferDate
+        ? `${payForm.reference} (Fecha: ${payForm.transferDate})`
+        : (payForm.reference || undefined);
+
       const result = await membershipsService.payInstallment(
         selectedInstallment.id,
         parseFloat(payForm.amount),
         payForm.payment_method,
-        payForm.reference || undefined,
+        finalReference,
         payForm.notes || undefined,
+        payForm.payment_method === 'transfer' && payForm.transferDocument ? payForm.transferDocument : undefined
       );
       toast.success(result.message || 'Pago registrado exitosamente');
       setPayDialogOpen(false);
@@ -273,9 +319,37 @@ function InstallmentsTab() {
 
   if (isLoading) {
     return (
-      <div className="h-64 flex flex-col items-center justify-center gap-3">
-        <ArrowsClockwise className="animate-spin text-primary" size={32} />
-        <p className="text-muted-foreground text-sm">Cargando cuotas...</p>
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i} className="border-border">
+              <CardHeader className="pb-2">
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-8 w-1/3 mt-1" />
+              </CardHeader>
+              <CardContent className="pt-0">
+                <Skeleton className="h-4 w-1/4" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <Card>
+          <CardHeader>
+            <div className="flex justify-between">
+              <div>
+                <Skeleton className="h-6 w-48" />
+                <Skeleton className="h-4 w-64 mt-2" />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex gap-4 mb-4">
+                <Skeleton className="h-6 w-full" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -547,18 +621,126 @@ function InstallmentsTab() {
                       <Bank size={16} /> Transferencia
                     </div>
                   </SelectItem>
+                  <SelectItem value="recurrente">
+                    <div className="flex items-center gap-2">
+                      <CreditCard size={16} /> Tarjeta (Recurrente)
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>Referencia (opcional)</Label>
-              <Input
-                value={payForm.reference}
-                onChange={(e) => setPayForm({ ...payForm, reference: e.target.value })}
-                placeholder="Nº de recibo, boleta, etc."
-              />
-            </div>
+            {payForm.payment_method === 'transfer' && (
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+                <h4 className="font-semibold text-sm">Datos de Transferencia</h4>
+                <div className="space-y-2">
+                  <Label>Fecha de Boleta / Transferencia</Label>
+                  <Input
+                    type="date"
+                    value={payForm.transferDate}
+                    onChange={(e) => setPayForm({ ...payForm, transferDate: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Número de Referencia / Boleta *</Label>
+                  <Input
+                    value={payForm.reference}
+                    onChange={(e) => setPayForm({ ...payForm, reference: e.target.value })}
+                    placeholder="Ej. AB01239"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Comprobante / Boleta (Opcional)</Label>
+                  <Input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      // Validar tipo
+                      if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+                        toast.error('Solo se permiten imágenes o PDF');
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onload = () => setPayForm({ ...payForm, transferDocument: reader.result as string });
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                  {payForm.transferDocument && (
+                    <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                      <Check size={12} /> Documento adjuntado
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {payForm.payment_method === 'recurrente' && (
+              <div className="p-4 border rounded-lg bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <CreditCard size={18} className="text-blue-600" />
+                  <h4 className="font-semibold text-sm text-blue-900 dark:text-blue-100">Pago con Tarjeta (Recurrente)</h4>
+                </div>
+                {!recurrenteCheckoutUrl ? (
+                  <Button
+                    type="button"
+                    onClick={generateRecurrenteLink}
+                    disabled={isGeneratingLink}
+                    className="w-full bg-blue-600 hover:bg-blue-700"
+                  >
+                    <CreditCard size={16} className="mr-2" />
+                    {isGeneratingLink ? 'Generando enlace...' : 'Generar Enlace de Pago'}
+                  </Button>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-green-700 dark:text-green-300 font-medium">✅ Enlace generado</p>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => window.open(recurrenteCheckoutUrl, '_blank')}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700"
+                      >
+                        Abrir Enlace
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          navigator.clipboard.writeText(recurrenteCheckoutUrl);
+                          toast.success('Enlace copiado');
+                        }}
+                      >
+                        Copiar
+                      </Button>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setRecurrenteCheckoutUrl(null)}
+                      className="w-full text-muted-foreground"
+                    >
+                      Regenerar enlace
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {payForm.payment_method !== 'transfer' && payForm.payment_method !== 'recurrente' && (
+              <div className="space-y-2">
+                <Label>Referencia (opcional)</Label>
+                <Input
+                  value={payForm.reference}
+                  onChange={(e) => setPayForm({ ...payForm, reference: e.target.value })}
+                  placeholder="Nº de recibo, boleta, etc."
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>Notas (opcional)</Label>
@@ -574,18 +756,32 @@ function InstallmentsTab() {
             <Button variant="outline" onClick={() => setPayDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button
-              onClick={handlePay}
-              disabled={isPaying || !payForm.amount}
-              className="gap-2 bg-green-600 hover:bg-green-700"
-            >
-              {isPaying ? (
-                <ArrowsClockwise size={16} className="animate-spin" />
-              ) : (
-                <CurrencyCircleDollar size={16} weight="fill" />
-              )}
-              Registrar Pago
-            </Button>
+            {payForm.payment_method === 'recurrente' ? (
+              <Button
+                onClick={() => {
+                  toast.success('Membresía se activará automáticamente cuando Recurrente confirme el pago');
+                  setPayDialogOpen(false);
+                }}
+                className="gap-2 bg-green-600 hover:bg-green-700"
+                disabled={!recurrenteCheckoutUrl}
+              >
+                <CheckCircle size={16} weight="fill" />
+                Ya completó el pago
+              </Button>
+            ) : (
+              <Button
+                onClick={handlePay}
+                disabled={isPaying || !payForm.amount}
+                className="gap-2 bg-green-600 hover:bg-green-700"
+              >
+                {isPaying ? (
+                  <ArrowsClockwise size={16} className="animate-spin" />
+                ) : (
+                  <CurrencyCircleDollar size={16} weight="fill" />
+                )}
+                Registrar Pago
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -753,9 +949,30 @@ function PaymentsHistoryTab() {
 
   if (isLoading) {
     return (
-      <div className="h-64 flex flex-col items-center justify-center gap-3">
-        <ArrowsClockwise className="animate-spin text-primary" size={32} />
-        <p className="text-muted-foreground text-sm">Cargando pagos...</p>
+      <div className="space-y-6">
+        <div className="grid gap-4 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="pb-3">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-8 w-16 mt-2" />
+              </CardHeader>
+            </Card>
+          ))}
+        </div>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-64 mt-2" />
+          </CardHeader>
+          <CardContent>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex gap-4 mb-4">
+                <Skeleton className="h-6 w-full" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -859,26 +1076,40 @@ function PaymentsHistoryTab() {
                       {fmtDate(p.paid_at || p.created_at)}
                     </TableCell>
                     <TableCell className="text-center">
-                      <div className="flex gap-1 justify-center">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1.5"
-                          onClick={() => handleDownloadReceipt(p.id)}
-                          title="Descargar Recibo PDF"
-                        >
-                          <Download size={14} />
-                          Recibo
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1"
-                          onClick={() => handlePrintTicket(p.id)}
-                          title="Imprimir Ticket 80mm"
-                        >
-                          <Printer size={14} />
-                        </Button>
+                      <div className="flex flex-col gap-1 justify-center align-middle">
+                        <div className="flex gap-1 justify-center">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5"
+                            onClick={() => handleDownloadReceipt(p.id)}
+                            title="Descargar Recibo PDF"
+                          >
+                            <Download size={14} />
+                            Recibo
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1"
+                            onClick={() => handlePrintTicket(p.id)}
+                            title="Imprimir Ticket 80mm"
+                          >
+                            <Printer size={14} />
+                          </Button>
+                        </div>
+                        {p.document_url && (
+                          <div className="flex gap-1 justify-center">
+                            <a
+                              href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/storage/${p.document_url}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs text-blue-600 hover:underline flex items-center gap-1 mt-1"
+                            >
+                              <FileText size={14} /> Ver Comprobante
+                            </a>
+                          </div>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

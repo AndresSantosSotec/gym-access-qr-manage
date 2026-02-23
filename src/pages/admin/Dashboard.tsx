@@ -13,6 +13,7 @@ import {
   CheckCircle,
   XCircle,
 } from '@phosphor-icons/react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { can } from '@/services/permissions';
 import type { PermissionKey } from '@/types/models';
@@ -101,6 +102,51 @@ export function Dashboard() {
     filterMetrics();
   }, [rawMetrics]);
 
+  if (isLoading) {
+    return (
+      <div className="p-6 lg:p-8 space-y-6">
+        <div className="flex flex-col gap-1">
+          <Skeleton className="h-9 w-3/4 max-w-[500px]" />
+          <Skeleton className="h-6 w-1/2 max-w-[300px] mt-2" />
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="border-primary/10">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-8 w-8 rounded-lg" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-20" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-40" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center justify-between p-4 rounded-lg border border-border">
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-6 w-6 rounded-full" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-5 w-32" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                </div>
+                <Skeleton className="h-6 w-20" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 lg:p-8 space-y-6">
       <div className="flex flex-col gap-1">
@@ -108,7 +154,7 @@ export function Dashboard() {
           ¡Bienvenido de nuevo, <span className="text-primary">{userName}</span>! 👋
         </h1>
         <p className="text-muted-foreground text-lg">
-          Aquí tienes el resumen de hoy en <span className="font-semibold text-foreground">GymFlow</span>.
+          Aquí tienes el resumen de hoy en <span className="font-semibold text-foreground">IronGym</span>.
         </p>
       </div>
 

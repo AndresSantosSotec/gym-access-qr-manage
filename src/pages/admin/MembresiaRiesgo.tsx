@@ -12,6 +12,7 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
 import { toast } from 'sonner';
+import { Skeleton } from '@/components/ui/skeleton';
 import api from '@/services/api.service';
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -124,8 +125,41 @@ export function MembresiaRiesgo() {
     }
 
     if (loading) return (
-        <div className="flex items-center justify-center h-64">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        <div className="p-6 space-y-6 max-w-6xl mx-auto">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <Skeleton className="w-7 h-7 rounded-full" />
+                    <div>
+                        <Skeleton className="h-8 w-64 mb-2" />
+                        <Skeleton className="h-4 w-32" />
+                    </div>
+                </div>
+                <Skeleton className="h-9 w-28" />
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                    <Card key={i}>
+                        <CardContent className="pt-5 flex items-center gap-3">
+                            <Skeleton className="w-8 h-8 rounded-full" />
+                            <div className="space-y-2">
+                                <Skeleton className="h-8 w-12" />
+                                <Skeleton className="h-4 w-24" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+            <div className="space-y-4 pt-4">
+                <Skeleton className="h-10 w-64" />
+                <Card>
+                    <CardHeader><Skeleton className="h-6 w-48" /></CardHeader>
+                    <CardContent className="space-y-4">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                            <Skeleton key={i} className="h-12 w-full" />
+                        ))}
+                    </CardContent>
+                </Card>
+            </div>
         </div>
     );
 

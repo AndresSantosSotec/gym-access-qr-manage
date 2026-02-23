@@ -31,6 +31,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { FileXls, FilePdf } from '@phosphor-icons/react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // ──────────────────────────────────────────────
 // Download Utility
@@ -920,9 +921,43 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
 
 function LoadingState() {
   return (
-    <div className="h-64 flex flex-col items-center justify-center gap-3">
-      <ArrowsClockwise className="animate-spin text-primary" size={32} />
-      <p className="text-muted-foreground text-sm">Cargando reporte...</p>
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Card key={i} className="border-none shadow-sm">
+            <CardContent className="pt-5 pb-4 px-4">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-xl" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-6 w-3/4" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <Card className="border-none shadow-sm">
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <Skeleton className="h-6 w-48 mb-2" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-9 w-64" />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex gap-4 mb-4">
+              <Skeleton className="h-6 w-full" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }

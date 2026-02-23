@@ -34,6 +34,7 @@ import type { User, Role } from '@/types/models';
 import { Plus, Pencil, Trash, UserCircle, MagnifyingGlass } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { formatDate } from '@/utils/date';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function Users() {
   const [users, setUsers] = useState<User[]>([]);
@@ -41,7 +42,8 @@ export function Users() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  
+  const [isLoading, setIsLoading] = useState(true);
+
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -53,12 +55,17 @@ export function Users() {
   }, []);
 
   const loadData = async () => {
-    const [usersData, rolesData] = await Promise.all([
-      usersService.getAllUsers(),
-      rolesService.getAllRoles()
-    ]);
-    setUsers(usersData);
-    setRoles(rolesData);
+    setIsLoading(true);
+    try {
+      const [usersData, rolesData] = await Promise.all([
+        usersService.getAllUsers(),
+        rolesService.getAllRoles()
+      ]);
+      setUsers(usersData);
+      setRoles(rolesData);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const filteredUsers = users.filter(user =>
@@ -98,7 +105,7 @@ export function Users() {
       return;
     }
 
-    const existingUser = users.find(u => 
+    const existingUser = users.find(u =>
       u.username === username && u.id !== editingUser?.id
     );
 
@@ -159,7 +166,39 @@ export function Users() {
             />
           </div>
 
-          {filteredUsers.length === 0 ? (
+          {isLoading ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Usuario</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Rol</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Creado</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <TableRow key={index}>
+                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                    <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                    <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex gap-2 justify-end">
+                        <Skeleton className="h-8 w-8" />
+                        <Skeleton className="h-8 w-8" />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : filteredUsers.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <UserCircle size={48} className="mx-auto mb-4 opacity-50" />
               <p>

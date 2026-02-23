@@ -224,6 +224,6 @@ src/pages/admin/Staff.tsx (estadísticas y vista mejorada)
 
 ---
 
-**Sistema desarrollado para GymFlow**  
+**Sistema desarrollado para IronGym**  
 Versión: 2.0.0  
 Fecha: Febrero 2026

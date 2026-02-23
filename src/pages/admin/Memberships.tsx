@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -248,56 +249,59 @@ export function Memberships() {
         </Button>
       </div>
 
-      {loading ? (
-        <Card>
-          <CardContent className="py-12">
-            <div className="text-center">
-              <SpinnerGap size={48} className="animate-spin text-primary mx-auto" />
-              <p className="mt-4 text-muted-foreground">Cargando planes...</p>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Planes Activos</CardTitle>
-              <CardDescription>Lista de todos los planes de membresía</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <DataTable
-                data={plans}
-                columns={columns}
-                emptyMessage="No hay planes de membresía registrados"
-              />
-            </CardContent>
-          </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Planes Activos</CardTitle>
+          <CardDescription>Lista de todos los planes de membresía</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            data={plans}
+            columns={columns}
+            isLoading={loading}
+            emptyMessage="No hay planes de membresía registrados"
+          />
+        </CardContent>
+      </Card>
 
-          <Card className="bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20">
-            <CardHeader>
-              <CardTitle>Planes Publicados en la Web</CardTitle>
-              <CardDescription>Los planes publicados aparecen en /p/planes</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-3">
-              {plans.filter(p => p.published).map((plan) => (
-                <div key={plan.id} className="bg-card p-4 rounded-lg border">
-                  <h3 className="font-bold text-lg">{plan.name}</h3>
-                  <p className="text-2xl font-bold text-primary mt-2">{formatCurrency(plan.price)}</p>
-                  <p className="text-sm text-muted-foreground mt-1">{plan.durationDays} días</p>
-                  <ul className="mt-3 space-y-1">
-                    {plan.features.slice(0, 3).map((feature, idx) => (
-                      <li key={idx} className="flex items-center gap-2 text-sm">
-                        <CheckCircle size={16} className="text-green-600" weight="fill" />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
+      <Card className="bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20">
+        <CardHeader>
+          <CardTitle>Planes Publicados en la Web</CardTitle>
+          <CardDescription>Los planes publicados aparecen en /p/planes</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-3">
+          {loading ? (
+            Array.from({ length: 3 }).map((_, idx) => (
+              <div key={idx} className="bg-card p-4 rounded-lg border space-y-2">
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-8 w-24 mt-2" />
+                <Skeleton className="h-4 w-16 mt-1" />
+                <div className="mt-4 space-y-2">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-5/6" />
+                  <Skeleton className="h-4 w-4/5" />
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-        </>
-      )}
+              </div>
+            ))
+          ) : (
+            plans.filter(p => p.published).map((plan) => (
+              <div key={plan.id} className="bg-card p-4 rounded-lg border">
+                <h3 className="font-bold text-lg">{plan.name}</h3>
+                <p className="text-2xl font-bold text-primary mt-2">{formatCurrency(plan.price)}</p>
+                <p className="text-sm text-muted-foreground mt-1">{plan.durationDays} días</p>
+                <ul className="mt-3 space-y-1">
+                  {plan.features.slice(0, 3).map((feature, idx) => (
+                    <li key={idx} className="flex items-center gap-2 text-sm">
+                      <CheckCircle size={16} className="text-green-600" weight="fill" />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

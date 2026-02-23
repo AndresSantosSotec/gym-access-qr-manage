@@ -1,4 +1,4 @@
-# 🏋️ GymFlow - Guía de Ejecución y Uso
+# 🏋️ IronGym - Guía de Ejecución y Uso
 
 ## ✅ PROYECTO COMPLETADO
 
@@ -81,7 +81,7 @@ Contraseña: Admin123!
 │
 ├── index.html                       ✅ HTML con fonts
 ├── PRD.md                           ✅ Documento de diseño
-└── README_GYMFLOW.md                ✅ Documentación completa
+└── README_IRONGYM.md                ✅ Documentación completa
 ```
 
 ---
@@ -455,4 +455,4 @@ Listo para integración con backend PHP.
 
 **¡El proyecto está 100% completo y listo para usar!**
 
-Ejecuta `npm run dev` y comienza a explorar GymFlow.
+Ejecuta `npm run dev` y comienza a explorar IronGym.

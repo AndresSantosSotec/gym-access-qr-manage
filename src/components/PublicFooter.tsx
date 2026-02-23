@@ -83,7 +83,7 @@ export function PublicFooter() {
 
         <div className="mt-12 pt-8 border-t border-border text-center text-sm text-muted-foreground">
           <p>© {new Date().getFullYear()} {config.gymName}. Todos los derechos reservados.</p>
-          <p className="mt-1">Sistema de gestión GymFlow v1.0</p>
+          <p className="mt-1">Sistema de gestión IronGym v1.0</p>
         </div>
       </div>
     </footer>

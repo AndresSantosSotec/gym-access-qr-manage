@@ -9,7 +9,7 @@ export const clearAllData = (): void => {
 
 // Hacer disponible globalmente para pruebas en consola
 if (typeof window !== 'undefined') {
-  (window as any).clearGymFlowData = clearAllData;
+  (window as any).clearIronGymData = clearAllData;
 }
 
 export const initializeSeedData = (): void => {
@@ -33,7 +33,6 @@ export const initializeSeedData = (): void => {
         'PAYMENTS_VIEW', 'PAYMENTS_MANAGE',
         'CASH_VIEW', 'CASH_MANAGE',
         'INVENTORY_VIEW', 'INVENTORY_MANAGE',
-        'ACCESS_VIEW', 'ACCESS_MANAGE',
         'SETTINGS_VIEW', 'SETTINGS_MANAGE',
         'ROLES_VIEW', 'ROLES_MANAGE',
         'USERS_VIEW', 'USERS_MANAGE',
@@ -50,7 +49,6 @@ export const initializeSeedData = (): void => {
         'PLANS_VIEW',
         'MEMBERSHIPS_VIEW', 'MEMBERSHIPS_MANAGE',
         'PAYMENTS_VIEW',
-        'ACCESS_VIEW',
       ],
       createdAt: now,
     },
@@ -180,18 +178,18 @@ Recuerda: los resultados se hacen en la cocina y se esculpen en el gimnasio.`,
   ];
 
   const siteConfig: SiteConfig = {
-    gymName: 'GymFlow',
+    gymName: 'IronGym',
     slogan: 'Tu mejor versión te espera',
     aboutText: 'Somos un gimnasio moderno y completo, dedicado a ayudarte a alcanzar tus metas de fitness. Con equipamiento de última generación, entrenadores certificados y un ambiente motivador, te acompañamos en cada paso de tu transformación.',
     phone: '+502 1234-5678',
     whatsapp: '+502 1234-5678',
-    instagram: '@gymflow_gt',
+    instagram: '@irongym_gt',
     primaryColor: 'oklch(0.45 0.15 285)',
     heroImageUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1200',
     updatedAt: now,
   };
 
-  storage.set('gymflow_roles', mockRoles);
+  storage.set('irongym_roles', mockRoles);
   storage.set(STORAGE_KEYS.MEMBERSHIP_PLANS, mockPlans);
   storage.set(STORAGE_KEYS.BLOG_POSTS, mockPosts);
   storage.set(STORAGE_KEYS.SITE_CONFIG, siteConfig);

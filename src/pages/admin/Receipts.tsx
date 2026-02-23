@@ -50,6 +50,7 @@ import {
   CalendarBlank,
   Export,
 } from '@phosphor-icons/react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { receiptsService, type Receipt } from '@/services/receipts.service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -293,7 +294,7 @@ export function ReceiptsPage() {
           receipt.payment_type === 'product' ? 'Venta/POS' : 'Otro';
 
     const message = encodeURIComponent(
-      `\u{1F3CB} *GymFlow - Comprobante de Pago*\n\n` +
+      `\u{1F3CB} *IronGym - Comprobante de Pago*\n\n` +
       `\u{1F4C4} Recibo: *${receipt.receipt_number}*\n` +
       `\u{1F464} Cliente: *${clientName}*\n` +
       `\u{1F4B0} Total: *${total}*\n` +
@@ -508,11 +509,18 @@ export function ReceiptsPage() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
-                      Cargando...
-                    </TableCell>
-                  </TableRow>
+                  Array.from({ length: 5 }).map((_, index) => (
+                    <TableRow key={index}>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-8 ml-auto" /></TableCell>
+                    </TableRow>
+                  ))
                 ) : receipts.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8">

@@ -1,4 +1,4 @@
-# Módulo de Personal y Staff - GymFlow
+# Módulo de Personal y Staff - IronGym
 
 ## Descripción
 
@@ -53,7 +53,7 @@ Ruta: `/admin/staff`
 Para acceder al sistema por primera vez:
 
 ```
-Email: admin@gymflow.com
+Email: admin@irongym.com
 Usuario: admin
 Contraseña: password123
 ```
@@ -246,7 +246,7 @@ Para dudas o problemas:
 
 ---
 
-**Desarrollado para GymFlow - Sistema de Gestión de Gimnasios**
+**Desarrollado para IronGym - Sistema de Gestión de Gimnasios**
 
 Versión: 2.0.0
 Fecha: 2026

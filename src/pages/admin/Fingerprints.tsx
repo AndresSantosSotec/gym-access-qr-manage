@@ -11,9 +11,13 @@ import type { Client } from '@/types/models';
 
 export function Fingerprints() {
   const [clients, setClients] = useState<Client[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    clientsService.getAll().then(data => setClients(data));
+    clientsService.getAll().then(data => {
+      setClients(data);
+      setIsLoading(false);
+    });
   }, []);
 
   const getInitials = (name: string) => {
@@ -140,6 +144,7 @@ export function Fingerprints() {
           <DataTable
             data={clients}
             columns={columns}
+            isLoading={isLoading}
             emptyMessage="No hay clientes registrados"
           />
         </CardContent>

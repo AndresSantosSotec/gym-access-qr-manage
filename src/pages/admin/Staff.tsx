@@ -314,6 +314,7 @@ export function Staff() {
           <DataTable
             data={filteredUsers}
             columns={columns}
+            isLoading={isLoading}
             emptyMessage={searchTerm ? 'No se encontraron usuarios' : 'No hay usuarios registrados'}
           />
         </CardContent>

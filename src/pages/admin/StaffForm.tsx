@@ -579,7 +579,7 @@ export function StaffForm() {
                                         type="email"
                                         value={formData.email}
                                         onChange={(e) => handleChange('email', e.target.value)}
-                                        placeholder="juan@gymflow.com"
+                                        placeholder="juan@irongym.com"
                                         className={`mt-1.5 ${errors.email ? 'border-destructive' : ''}`}
                                     />
                                     {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}

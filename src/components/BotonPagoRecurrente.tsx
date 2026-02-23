@@ -35,7 +35,7 @@ import type { RecurrenteClientStatus } from '@/services/recurrente.service';
 //  Clave de localStorage para reconciliación post-checkout
 //  FIX 4.2 — Guardamos el contexto de pago por si expira la sesión
 // ─────────────────────────────────────────────────────────────
-const CHECKOUT_STORAGE_KEY = 'gymflow_pending_checkout';
+const CHECKOUT_STORAGE_KEY = 'irongym_pending_checkout';
 
 interface PendingCheckout {
     checkoutId: string;

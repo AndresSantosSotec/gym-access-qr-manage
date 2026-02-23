@@ -4,7 +4,6 @@ import {
   ChartBar,
   Users,
   CreditCard,
-  QrCode,
   Gear,
   Barbell,
   Money,
@@ -13,20 +12,22 @@ import {
   Article,
   UserCircleGear,
   ChartLine,
-  Bell,
-  Camera,
-  Fingerprint,
   UserList,
   Package,
   Warehouse,
   ShoppingCart,
   Receipt,
+  X,
 } from '@phosphor-icons/react';
 import { can } from '@/services/permissions';
 import type { PermissionKey } from '@/types/models';
 
 interface SidebarProps {
   className?: string;
+  /** Mobile drawer: is sidebar visible? */
+  isOpen?: boolean;
+  /** Mobile drawer: callback to close */
+  onClose?: () => void;
 }
 
 interface MenuItem {
@@ -43,9 +44,6 @@ const menuItems: MenuItem[] = [
   { to: '/admin/memberships', icon: CreditCard, label: 'Membresías', permission: 'MEMBERSHIPS_VIEW' },
   { to: '/admin/payments', icon: Money, label: 'Pagos', permission: 'PAYMENTS_VIEW' },
   { to: '/admin/receipts', icon: Receipt, label: 'Recibos y Facturas', permission: 'PAYMENTS_VIEW' },
-  { to: '/admin/access', icon: QrCode, label: 'Control de Acceso', permission: 'ACCESS_VIEW' },
-  { to: '/admin/fingerprints', icon: Fingerprint, label: 'Huellas Digitales', permission: 'ACCESS_VIEW' },
-  { to: '/admin/identifier', icon: Fingerprint, label: 'Identificador Huella', permission: 'ACCESS_VIEW' },
   { to: '/admin/staff', icon: UserList, label: 'Personal y Staff', permission: 'USERS_VIEW' },
   { to: '/admin/productos', icon: Package, label: 'Productos', permission: 'PRODUCTS_VIEW' },
   { to: '/admin/inventario', icon: Warehouse, label: 'Inventario', permission: 'INVENTORY_VIEW' },
@@ -59,40 +57,49 @@ const plannedItems: MenuItem[] = [
   { to: '/admin/reports', icon: ChartLine, label: 'Reportes' },
 ];
 
-export function Sidebar({ className }: SidebarProps) {
+function SidebarContent({ onClose }: { onClose?: () => void }) {
   const filteredMenuItems = menuItems.filter(item => !item.permission || can(item.permission));
   const filteredPlannedItems = plannedItems.filter(item => !item.permission || can(item.permission));
 
   return (
-    <aside
-      className={cn(
-        'w-64 bg-card border-r border-border flex flex-col overflow-y-auto',
-        className
-      )}
+    <div
+      className="flex flex-col h-full w-64"
       style={{
         backgroundColor: 'var(--sidebar, var(--card))',
         color: 'var(--sidebar-foreground, var(--card-foreground))',
-        borderColor: 'var(--border)'
       }}
     >
-      <div className="p-6 border-b border-border">
+      {/* Logo */}
+      <div className="p-6 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
             <Barbell className="text-primary-foreground" size={24} weight="bold" />
           </div>
           <div>
-            <h1 className="font-bold text-lg tracking-tight">GymFlow</h1>
+            <h1 className="font-bold text-lg tracking-tight">IronGym</h1>
             <p className="text-xs text-muted-foreground">Sistema de Control</p>
           </div>
         </div>
+        {/* Close button — only visible on mobile */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="lg:hidden p-1.5 rounded-md hover:bg-accent transition-colors"
+            aria-label="Cerrar menú"
+          >
+            <X size={20} />
+          </button>
+        )}
       </div>
 
-      <nav className="flex-1 p-4 space-y-6">
+      {/* Nav */}
+      <nav className="flex-1 p-4 space-y-6 overflow-y-auto">
         <div className="space-y-1">
           {filteredMenuItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
+              onClick={onClose}
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-3 px-4 py-3 rounded-lg transition-all',
@@ -116,13 +123,14 @@ export function Sidebar({ className }: SidebarProps) {
         <div className="space-y-1">
           <div className="px-4 py-2">
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
-              Planificado
+              Administración
             </p>
           </div>
           {filteredPlannedItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
+              onClick={onClose}
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-3 px-4 py-3 rounded-lg transition-all',
@@ -144,11 +152,48 @@ export function Sidebar({ className }: SidebarProps) {
         </div>
       </nav>
 
+      {/* Footer */}
       <div className="p-4 border-t border-border">
         <div className="text-xs text-muted-foreground text-center">
-          v2.0.0 - MVP Extendido
+          v2.0.0 · IronGym
         </div>
       </div>
-    </aside>
+    </div>
+  );
+}
+
+export function Sidebar({ className, isOpen, onClose }: SidebarProps) {
+  return (
+    <>
+      {/* ── Desktop sidebar — always visible on lg+ ── */}
+      <aside
+        className={cn(
+          'hidden lg:flex border-r border-border overflow-y-auto',
+          className
+        )}
+        style={{ borderColor: 'var(--border)' }}
+      >
+        <SidebarContent />
+      </aside>
+
+      {/* ── Mobile drawer overlay ── */}
+      {isOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 flex">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={onClose}
+            aria-hidden="true"
+          />
+          {/* Drawer panel */}
+          <aside
+            className="relative z-50 border-r border-border h-full overflow-y-auto"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <SidebarContent onClose={onClose} />
+          </aside>
+        </div>
+      )}
+    </>
   );
 }

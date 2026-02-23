@@ -28,6 +28,7 @@ import type { Role, PermissionKey } from '@/types/models';
 import { Plus, Pencil, Trash, UserGear } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { formatDate } from '@/utils/date';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const PERMISSION_GROUPS = {
   'Dashboard': ['DASHBOARD_VIEW'] as PermissionKey[],
@@ -39,18 +40,19 @@ const PERMISSION_GROUPS = {
   'Inventario': ['INVENTORY_VIEW', 'INVENTORY_IN', 'INVENTORY_OUT', 'INVENTORY_MANAGE'] as PermissionKey[],
   'Productos': ['PRODUCTS_VIEW', 'PRODUCTS_CREATE', 'PRODUCTS_EDIT', 'PRODUCTS_DELETE'] as PermissionKey[],
   'Ventas': ['SALES_VIEW', 'SALES_CREATE', 'QUOTES_VIEW', 'SALES_CLIENTS_MANAGE'] as PermissionKey[],
-  'Control de Acceso': ['ACCESS_VIEW', 'ACCESS_MANAGE'] as PermissionKey[],
+  // 'Control de Acceso': ['ACCESS_VIEW', 'ACCESS_MANAGE'] as PermissionKey[], // ROADMAP FUTURO
   'Configuración': ['SETTINGS_VIEW', 'SETTINGS_MANAGE'] as PermissionKey[],
   'Roles': ['ROLES_VIEW', 'ROLES_MANAGE'] as PermissionKey[],
   'Usuarios': ['USERS_VIEW', 'USERS_MANAGE'] as PermissionKey[],
-  'Otros': ['REPORTS_VIEW', 'NOTIFICATIONS_VIEW', 'CAMERAS_VIEW'] as PermissionKey[],
+  'Otros': ['REPORTS_VIEW', 'NOTIFICATIONS_VIEW'] as PermissionKey[],
 };
 
 export function Roles() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
-  
+  const [isLoading, setIsLoading] = useState(true);
+
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [permissions, setPermissions] = useState<PermissionKey[]>([]);
@@ -60,8 +62,13 @@ export function Roles() {
   }, []);
 
   const loadRoles = async () => {
-    const data = await rolesService.getAllRoles();
-    setRoles(data);
+    setIsLoading(true);
+    try {
+      const data = await rolesService.getAllRoles();
+      setRoles(data);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleOpenCreate = () => {
@@ -118,7 +125,7 @@ export function Roles() {
       const otherRolesWithManage = roles.filter(
         r => r.id !== editingRole.id && r.permissions.includes('ROLES_MANAGE')
       );
-      
+
       if (!hasRolesManage && otherRolesWithManage.length === 0) {
         toast.error('Debe existir al menos un rol con permiso ROLES_MANAGE');
         return;
@@ -140,7 +147,7 @@ export function Roles() {
 
     const users = await usersService.getAllUsers();
     const usersWithRole = users.filter(u => u.roleId === role.id);
-    
+
     if (usersWithRole.length > 0) {
       toast.error(`No se puede eliminar. ${usersWithRole.length} usuario(s) tienen este rol.`);
       return;
@@ -150,7 +157,7 @@ export function Roles() {
       const otherRolesWithManage = roles.filter(
         r => r.id !== role.id && r.permissions.includes('ROLES_MANAGE')
       );
-      
+
       if (otherRolesWithManage.length === 0) {
         toast.error('No se puede eliminar el último rol con permiso ROLES_MANAGE');
         return;
@@ -178,7 +185,31 @@ export function Roles() {
       </div>
 
       <div className="grid gap-4">
-        {roles.length === 0 ? (
+        {isLoading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <div className="flex justify-between">
+                  <div>
+                    <Skeleton className="h-6 w-32 mb-2" />
+                    <Skeleton className="h-4 w-64" />
+                  </div>
+                  <div className="flex gap-2">
+                    <Skeleton className="h-8 w-8" />
+                    <Skeleton className="h-8 w-8" />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-2 mb-3">
+                  <Skeleton className="h-6 w-24 rounded-full" />
+                  <Skeleton className="h-6 w-24 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-32" />
+              </CardContent>
+            </Card>
+          ))
+        ) : roles.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center text-muted-foreground">
               <UserGear size={48} className="mx-auto mb-4 opacity-50" />

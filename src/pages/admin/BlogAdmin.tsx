@@ -291,17 +291,12 @@ export function BlogAdmin() {
           <CardDescription>Lista de artículos del blog</CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center py-8">
-              <Spinner className="animate-spin h-8 w-8 text-primary" />
-            </div>
-          ) : (
-            <DataTable
-              data={posts}
-              columns={columns}
-              emptyMessage="No hay posts para mostrar"
-            />
-          )}
+          <DataTable
+            data={posts}
+            columns={columns}
+            isLoading={isLoading}
+            emptyMessage="No hay posts para mostrar"
+          />
         </CardContent>
       </Card>
 

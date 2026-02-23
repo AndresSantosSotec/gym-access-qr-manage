@@ -114,11 +114,7 @@ function App() {
             <Route path="receipts" element={<ReceiptsPage />} />
           </Route>
 
-          <Route element={<PermissionGuard permission="ACCESS_VIEW" />}>
-            <Route path="access" element={<AccessControl />} />
-            <Route path="fingerprints" element={<Fingerprints />} />
-            <Route path="identifier" element={<Identifier />} />
-          </Route>
+          {/* Control de Acceso / Huellas Digitales — ROADMAP FUTURO */}
 
           {/* Configuración de Sitio */}
           <Route element={<PermissionGuard permission="SETTINGS_VIEW" />}>
@@ -161,9 +157,7 @@ function App() {
           <Route element={<PermissionGuard permission="NOTIFICATIONS_VIEW" />}>
             <Route path="notifications" element={<Notifications />} />
           </Route>
-          <Route element={<PermissionGuard permission="CAMERAS_VIEW" />}>
-            <Route path="cameras" element={<Cameras />} />
-          </Route>
+          {/* Cámaras — ROADMAP FUTURO */}
           <Route element={<PermissionGuard permission="SETTINGS_VIEW" />}>
             <Route path="settings" element={<Settings />} />
           </Route>
