@@ -32,6 +32,8 @@ import { clientsService } from '@/services/clients.service';
 import { membershipsService } from '@/services/memberships.service';
 import { accessService } from '@/services/access.service';
 import { economicProfileService } from '@/services/economic-profile.service';
+import { api } from '@/services/api.service';
+import { can } from '@/services/permissions';
 import { formatDate, formatDateTime, formatCurrency, getDaysRemaining } from '@/utils/date';
 import { toast } from 'sonner';
 import {
@@ -107,6 +109,7 @@ export function ClientDetail() {
 
   const [accessLogs, setAccessLogs] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
+  const [deletingPaymentId, setDeletingPaymentId] = useState<number | null>(null);
 
   useEffect(() => {
     if (client) {
@@ -170,6 +173,23 @@ export function ClientDetail() {
   const loadEconomicProfile = (clientId: string) => {
     const items = economicProfileService.getByClient(clientId);
     setEconomicItems(items);
+  };
+
+  const handleDeletePayment = async (paymentId: number) => {
+    if (!confirm('¿Eliminar este pago y los recibos/facturas asociados? Esta acción no se puede deshacer.')) return;
+    setDeletingPaymentId(paymentId);
+    try {
+      await api.delete(`/payments/${paymentId}`);
+      toast.success('Pago y recibos asociados eliminados');
+      if (client) {
+        const list = await membershipsService.getPaymentsByClient(client.id);
+        setPayments(list);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'No se pudo eliminar el pago');
+    } finally {
+      setDeletingPaymentId(null);
+    }
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -905,7 +925,21 @@ export function ClientDetail() {
                               {method === 'CASH' ? 'Efectivo' : method === 'CARD' ? 'Tarjeta' : method === 'STRIPE' ? 'Stripe' : 'Transferencia'}
                             </Badge>
                           </div>
-                          <p className="text-lg font-bold">{formatCurrency(Number(payment.amount ?? 0))}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-lg font-bold">{formatCurrency(Number(payment.amount ?? 0))}</p>
+                            {can('ROLES_MANAGE') && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => handleDeletePayment(payment.id)}
+                                disabled={deletingPaymentId === payment.id}
+                                title="Eliminar pago y recibos/facturas asociados"
+                              >
+                                <Trash size={18} />
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         {(payment.transaction_id ?? payment.reference) && (
                           <p className="text-xs text-muted-foreground mt-2">

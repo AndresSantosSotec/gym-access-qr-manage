@@ -31,6 +31,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api } from '@/services/api.service';
 import { membershipsService } from '@/services/memberships.service';
 import { receiptsService } from '@/services/receipts.service';
+import { can } from '@/services/permissions';
 import { formatCurrency, formatDate } from '@/utils/date';
 import {
   CreditCard,
@@ -48,6 +49,7 @@ import {
   MagnifyingGlass,
   Printer,
   FileText,
+  Trash,
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -806,11 +808,26 @@ function PaymentsHistoryTab() {
     transaction_id: '',
     notes: '',
   });
+  const [deletingPaymentId, setDeletingPaymentId] = useState<number | null>(null);
 
   useEffect(() => {
     loadPayments();
     loadClients();
   }, []);
+
+  const handleDeletePayment = async (p: { id: number }) => {
+    if (!confirm('¿Eliminar este pago y los recibos/facturas asociados? Esta acción no se puede deshacer.')) return;
+    setDeletingPaymentId(p.id);
+    try {
+      await api.delete(`/payments/${p.id}`);
+      toast.success('Pago y recibos asociados eliminados');
+      loadPayments();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'No se pudo eliminar el pago');
+    } finally {
+      setDeletingPaymentId(null);
+    }
+  };
 
   const loadClients = async () => {
     try {
@@ -1077,7 +1094,7 @@ function PaymentsHistoryTab() {
                     </TableCell>
                     <TableCell className="text-center">
                       <div className="flex flex-col gap-1 justify-center align-middle">
-                        <div className="flex gap-1 justify-center">
+                        <div className="flex gap-1 justify-center flex-wrap">
                           <Button
                             size="sm"
                             variant="outline"
@@ -1097,6 +1114,18 @@ function PaymentsHistoryTab() {
                           >
                             <Printer size={14} />
                           </Button>
+                          {can('ROLES_MANAGE') && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => handleDeletePayment(p)}
+                              disabled={deletingPaymentId === p.id}
+                              title="Eliminar pago y recibos/facturas asociados"
+                            >
+                              <Trash size={14} />
+                            </Button>
+                          )}
                         </div>
                         {p.document_url && (
                           <div className="flex gap-1 justify-center">
