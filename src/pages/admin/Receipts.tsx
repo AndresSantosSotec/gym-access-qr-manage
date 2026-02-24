@@ -53,8 +53,12 @@ import {
 } from '@phosphor-icons/react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { receiptsService, type Receipt } from '@/services/receipts.service';
+import { can } from '@/services/permissions';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+
+/** Solo el admin puede borrar recibos/facturas (permiso ROLES_MANAGE = rol administrador) */
+const canDeleteReceipts = () => can('ROLES_MANAGE');
 
 interface FilterState {
   status: string;
@@ -636,15 +640,19 @@ export function ReceiptsPage() {
                               Descargar Ticket PDF
                             </DropdownMenuItem>
 
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => handleDeleteReceipt(receipt)}
-                              disabled={deletingId === receipt.id}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <Trash className="w-4 h-4 mr-2" />
-                              {deletingId === receipt.id ? 'Eliminando…' : 'Eliminar recibo/factura'}
-                            </DropdownMenuItem>
+                            {canDeleteReceipts() && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleDeleteReceipt(receipt)}
+                                  disabled={deletingId === receipt.id}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash className="w-4 h-4 mr-2" />
+                                  {deletingId === receipt.id ? 'Eliminando…' : 'Eliminar recibo/factura'}
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
