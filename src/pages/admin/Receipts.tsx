@@ -49,6 +49,7 @@ import {
   Receipt as ReceiptIcon,
   CalendarBlank,
   Export,
+  Trash,
 } from '@phosphor-icons/react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { receiptsService, type Receipt } from '@/services/receipts.service';
@@ -90,6 +91,7 @@ export function ReceiptsPage() {
     payment_method: '',
   });
   const [reportLoading, setReportLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [stats, setStats] = useState({
     total: 0,
     paid: 0,
@@ -348,6 +350,25 @@ export function ReceiptsPage() {
         {labels[status] || status}
       </Badge>
     );
+  };
+
+  const handleDeleteReceipt = async (receipt: Receipt) => {
+    if (!confirm(`¿Eliminar recibo/factura ${receipt.receipt_number}? Esta acción no se puede deshacer.`)) return;
+    setDeletingId(receipt.id);
+    try {
+      await receiptsService.delete(receipt.id);
+      toast.success('Recibo eliminado');
+      loadReceipts();
+      loadStats();
+      if (selectedReceipt?.id === receipt.id) {
+        setSelectedReceipt(null);
+        setPreviewOpen(false);
+      }
+    } catch {
+      toast.error('No se pudo eliminar el recibo');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -613,6 +634,16 @@ export function ReceiptsPage() {
                             <DropdownMenuItem onClick={() => handleDownloadTicket(receipt)}>
                               <Printer className="w-4 h-4 mr-2" />
                               Descargar Ticket PDF
+                            </DropdownMenuItem>
+
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteReceipt(receipt)}
+                              disabled={deletingId === receipt.id}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash className="w-4 h-4 mr-2" />
+                              {deletingId === receipt.id ? 'Eliminando…' : 'Eliminar recibo/factura'}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

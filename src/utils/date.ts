@@ -10,8 +10,10 @@ export const formatDate = (date: string | Date | undefined | null): string => {
   });
 };
 
-export const formatDateTime = (date: string | Date): string => {
+export const formatDateTime = (date: string | Date | undefined | null): string => {
+  if (date == null || date === '') return 'N/A';
   const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return 'Fecha inválida';
   return d.toLocaleDateString('es-ES', {
     year: 'numeric',
     month: 'short',

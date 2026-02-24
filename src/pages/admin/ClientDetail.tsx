@@ -886,25 +886,30 @@ export function ClientDetail() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {payments.map((payment) => {
-                    const plan = membershipsService.getPlanByIdSync(payment.planId);
+                  {payments.map((payment: any) => {
+                    const planName =
+                      payment.membership?.plan?.name ??
+                      membershipsService.getPlanByIdSync(payment.plan_id ?? payment.planId)?.name ??
+                      'Plan desconocido';
+                    const paidAt = payment.paid_at ?? payment.created_at ?? payment.createdAt;
+                    const method = (payment.payment_method ?? payment.method ?? '').toUpperCase();
                     return (
                       <div key={payment.id} className="p-4 border border-border rounded-lg">
                         <div className="flex justify-between items-start">
                           <div>
-                            <p className="font-semibold">{plan?.name || 'Plan desconocido'}</p>
+                            <p className="font-semibold">{planName}</p>
                             <p className="text-sm text-muted-foreground mt-1">
-                              {formatDateTime(payment.createdAt)}
+                              {formatDateTime(paidAt)}
                             </p>
                             <Badge variant="outline" className="mt-2">
-                              {payment.method === 'CASH' ? 'Efectivo' : payment.method === 'CARD' ? 'Tarjeta' : payment.method === 'STRIPE' ? 'Stripe' : 'Transferencia'}
+                              {method === 'CASH' ? 'Efectivo' : method === 'CARD' ? 'Tarjeta' : method === 'STRIPE' ? 'Stripe' : 'Transferencia'}
                             </Badge>
                           </div>
-                          <p className="text-lg font-bold">{formatCurrency(payment.amount)}</p>
+                          <p className="text-lg font-bold">{formatCurrency(Number(payment.amount ?? 0))}</p>
                         </div>
-                        {payment.reference && (
+                        {(payment.transaction_id ?? payment.reference) && (
                           <p className="text-xs text-muted-foreground mt-2">
-                            Ref: {payment.reference}
+                            Ref: {payment.transaction_id ?? payment.reference}
                           </p>
                         )}
                       </div>
