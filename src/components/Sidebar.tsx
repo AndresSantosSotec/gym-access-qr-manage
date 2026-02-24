@@ -17,6 +17,7 @@ import {
   Warehouse,
   ShoppingCart,
   Receipt,
+  Terminal,
   X,
 } from '@phosphor-icons/react';
 import { can } from '@/services/permissions';
@@ -54,7 +55,8 @@ const menuItems: MenuItem[] = [
 
 const plannedItems: MenuItem[] = [
   { to: '/admin/roles', icon: UserCircleGear, label: 'Roles', permission: 'ROLES_MANAGE' },
-  { to: '/admin/reports', icon: ChartLine, label: 'Reportes' },
+  { to: '/admin/reports', icon: ChartLine, label: 'Reportes', permission: 'REPORTS_VIEW' },
+  { to: '/admin/monitor', icon: Terminal, label: 'Monitor / Logs', permission: 'MONITOR_VIEW' },
 ];
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {

@@ -42,6 +42,7 @@ import { PublicStripeDemoCheckout } from '@/pages/public/PublicStripeDemoCheckou
 import { PausarMembresia } from '@/pages/admin/PausarMembresia';
 import { ReactivarCobro } from '@/pages/admin/ReactivarCobro';
 import { MembresiaRiesgo } from '@/pages/admin/MembresiaRiesgo';
+import { Monitoring } from '@/pages/admin/Monitoring';
 
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { Forbidden } from '@/pages/admin/Forbidden';
@@ -153,6 +154,9 @@ function App() {
           {/* Otros */}
           <Route element={<PermissionGuard permission="REPORTS_VIEW" />}>
             <Route path="reports" element={<Reports />} />
+          </Route>
+          <Route element={<PermissionGuard permission="MONITOR_VIEW" />}>
+            <Route path="monitor" element={<Monitoring />} />
           </Route>
           <Route element={<PermissionGuard permission="NOTIFICATIONS_VIEW" />}>
             <Route path="notifications" element={<Notifications />} />

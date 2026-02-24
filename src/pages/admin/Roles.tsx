@@ -44,7 +44,7 @@ const PERMISSION_GROUPS = {
   'Configuración': ['SETTINGS_VIEW', 'SETTINGS_MANAGE'] as PermissionKey[],
   'Roles': ['ROLES_VIEW', 'ROLES_MANAGE'] as PermissionKey[],
   'Usuarios': ['USERS_VIEW', 'USERS_MANAGE'] as PermissionKey[],
-  'Otros': ['REPORTS_VIEW', 'NOTIFICATIONS_VIEW'] as PermissionKey[],
+  'Otros': ['REPORTS_VIEW', 'NOTIFICATIONS_VIEW', 'MONITOR_VIEW'] as PermissionKey[],
 };
 
 export function Roles() {

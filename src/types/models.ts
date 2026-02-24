@@ -131,7 +131,8 @@ export type PermissionKey =
   | 'SETTINGS_VIEW' | 'SETTINGS_MANAGE'
   | 'ROLES_VIEW' | 'ROLES_MANAGE'
   | 'USERS_VIEW' | 'USERS_MANAGE'
-  | 'REPORTS_VIEW' | 'NOTIFICATIONS_VIEW';
+  | 'REPORTS_VIEW' | 'NOTIFICATIONS_VIEW'
+  | 'MONITOR_VIEW';
 
 export interface Role {
   id: string;
