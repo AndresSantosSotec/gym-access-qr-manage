@@ -9,6 +9,7 @@ import {
   CaretUp,
   Copy,
   MagnifyingGlass,
+  Trash,
 } from '@phosphor-icons/react';
 import { api } from '@/services/api.service';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -16,6 +17,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -61,6 +72,8 @@ export function Monitoring() {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -119,6 +132,21 @@ export function Monitoring() {
     toast.success('Línea copiada');
   };
 
+  const handleClearLogs = async () => {
+    setClearing(true);
+    try {
+      await api.delete('/monitor/logs');
+      toast.success('Log de Laravel limpiado correctamente');
+      setClearDialogOpen(false);
+      fetchStats();
+      fetchLogs();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'Error al limpiar los logs');
+    } finally {
+      setClearing(false);
+    }
+  };
+
   if (loading && !stats && entries.length === 0) {
     return (
       <div className="p-6 space-y-6">
@@ -155,11 +183,45 @@ export function Monitoring() {
             Logs detallados de Laravel para verificar errores y depuración. Solo visible para administradores.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={refresh} disabled={loadingLogs}>
-          <ArrowsClockwise size={18} className={loadingLogs ? 'animate-spin' : ''} />
-          Actualizar
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={refresh} disabled={loadingLogs}>
+            <ArrowsClockwise size={18} className={loadingLogs ? 'animate-spin' : ''} />
+            Actualizar
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setClearDialogOpen(true)}
+            disabled={loadingLogs || (stats && !stats.exists)}
+            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+          >
+            <Trash size={18} />
+            Limpiar logs
+          </Button>
+        </div>
       </div>
+
+      <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Limpiar log de Laravel?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se vaciará por completo el archivo <code className="text-xs bg-muted px-1 rounded">laravel.log</code>.
+              Esta acción no se puede deshacer. Los nuevos eventos seguirán escribiendo en el mismo archivo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={clearing}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleClearLogs(); }}
+              disabled={clearing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {clearing ? 'Limpiando…' : 'Limpiar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {stats && (
         <Card>

@@ -84,6 +84,47 @@ export function useAuth() {
     return true;
   }, [setAuth]);
 
+  /**
+   * Refresca el usuario desde la API (GET /api/user) y actualiza permisos en localStorage.
+   * Útil cuando un admin agrega un permiso nuevo: basta recargar la página o entrar al admin.
+   */
+  const refreshUser = useCallback(async () => {
+    const current = readAuth();
+    if (!current?.token) return;
+    try {
+      const response = await axios.get(`${API_URL}/user`, {
+        headers: { Authorization: `Bearer ${current.token}` },
+      });
+      const backendUser = response.data;
+      const authState: AuthState = {
+        ...current,
+        user: {
+          id: String(backendUser.id),
+          name: backendUser.name ?? '',
+          username: backendUser.username ?? backendUser.email ?? '',
+          email: backendUser.email ?? '',
+          roleId: String(backendUser.role_id ?? ''),
+          role: backendUser.role
+            ? {
+                id: String(backendUser.role.id),
+                name: backendUser.role.name,
+                description: backendUser.role.description ?? '',
+                permissions: (backendUser.role.permissions ?? []).map(
+                  (p: any) => p.slug ?? p.name ?? p
+                ),
+                createdAt: backendUser.role.created_at ?? '',
+              }
+            : undefined,
+          active: backendUser.active ?? true,
+          createdAt: backendUser.created_at ?? new Date().toISOString(),
+        },
+      };
+      setAuth(authState);
+    } catch {
+      // Si falla (ej. 401), no sobrescribir auth
+    }
+  }, [setAuth]);
+
   const logout = useCallback(async () => {
     // Try to call backend logout (revoke token)
     try {
