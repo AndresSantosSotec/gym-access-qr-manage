@@ -1,15 +1,24 @@
 import { api } from './api.service';
 import type { Client } from '@/types/models';
-import { buildStorageUrl } from '@/utils/url.utils';
+
+/** Construye URL de foto: mismo origen que la app (evita localhost y Mixed Content). */
+function photoPublicUrl(publicPath: string | null | undefined): string | undefined {
+  if (!publicPath) return undefined;
+  if (publicPath.startsWith('http')) return publicPath;
+  if (typeof window !== 'undefined') {
+    return window.location.origin + (publicPath.startsWith('/') ? publicPath : '/' + publicPath);
+  }
+  return undefined;
+}
 
 // Helper transform function
 const mapClientFromBackend = (data: any): Client => {
-  // Prefer backend-provided full URL (photo_full_url) so the correct host is used
+  // photo_public_path = /storage/clients/photos/xxx.jpg → mismo origen, sin host del backend
   let profilePhoto: string | undefined = undefined;
-  if (data.photo_full_url) {
-    profilePhoto = data.photo_full_url;
+  if (data.photo_public_path) {
+    profilePhoto = photoPublicUrl(data.photo_public_path);
   } else if (data.photo_url) {
-    profilePhoto = buildStorageUrl(data.photo_url);
+    profilePhoto = photoPublicUrl('/storage/' + (data.photo_url as string).replace(/^\//, ''));
   } else if (data.profile_photo_url) {
     profilePhoto = data.profile_photo_url;
   }
