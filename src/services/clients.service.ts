@@ -4,12 +4,13 @@ import { buildStorageUrl } from '@/utils/url.utils';
 
 // Helper transform function
 const mapClientFromBackend = (data: any): Client => {
-  // Construct full photo URL if exists
+  // Prefer backend-provided full URL (photo_full_url) so the correct host is used
   let profilePhoto: string | undefined = undefined;
-  if (data.photo_url) {
+  if (data.photo_full_url) {
+    profilePhoto = data.photo_full_url;
+  } else if (data.photo_url) {
     profilePhoto = buildStorageUrl(data.photo_url);
   } else if (data.profile_photo_url) {
-    // Laravel Jetstream/common convention
     profilePhoto = data.profile_photo_url;
   }
 

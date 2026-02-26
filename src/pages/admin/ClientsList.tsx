@@ -38,6 +38,26 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
+function ClientAvatar({ client, getInitials }: { client: Client; getInitials: (name: string) => string }) {
+  const [imgError, setImgError] = useState(false);
+  const showPlaceholder = !client.profilePhoto || imgError;
+  if (showPlaceholder) {
+    return (
+      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-sm font-bold text-primary">
+        {getInitials(client.name)}
+      </div>
+    );
+  }
+  return (
+    <img
+      src={client.profilePhoto}
+      alt={client.name}
+      className="w-10 h-10 rounded-full object-cover ring-2 ring-border"
+      onError={() => setImgError(true)}
+    />
+  );
+}
+
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 50];
 
 export function ClientsList() {
@@ -167,17 +187,7 @@ export function ClientsList() {
     {
       header: 'Foto',
       cell: (client) => (
-        client.profilePhoto ? (
-          <img
-            src={client.profilePhoto}
-            alt={client.name}
-            className="w-10 h-10 rounded-full object-cover ring-2 ring-border"
-          />
-        ) : (
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-sm font-bold text-primary">
-            {getInitials(client.name)}
-          </div>
-        )
+        <ClientAvatar client={client} getInitials={getInitials} />
       )
     },
     {

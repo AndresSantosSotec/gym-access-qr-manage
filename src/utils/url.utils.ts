@@ -21,21 +21,16 @@ export const getApiUrl = (): string => {
 };
 
 /**
- * Get the storage URL for uploaded files, auto-detecting based on environment
+ * Get the storage URL for uploaded files (same host as API so photos load from the server).
  */
 export const getStorageUrl = (): string => {
   if (import.meta.env.VITE_STORAGE_URL) {
     return import.meta.env.VITE_STORAGE_URL;
   }
-  
-  if (typeof window !== 'undefined') {
-    const currentHost = window.location.origin;
-    if (currentHost.includes('irongymgt.com')) {
-      return `${currentHost}/storage`;
-    }
-  }
-  
-  return 'http://localhost:8000/storage';
+  // Derive from API URL so storage is always on the backend host (e.g. api.irongymgt.com/storage)
+  const apiUrl = getApiUrl();
+  const base = apiUrl.replace(/\/api\/?$/, '');
+  return `${base}/storage`;
 };
 
 /**
