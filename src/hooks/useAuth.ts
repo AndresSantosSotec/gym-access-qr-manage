@@ -1,8 +1,9 @@
 import { useState, useCallback } from 'react';
 import axios from 'axios';
 import type { AuthState } from '@/types/models';
+import { getApiUrl } from '@/utils/url.utils';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_URL = getApiUrl();
 
 /**
  * Unified auth key — must match STORAGE_KEYS.AUTH ('gym_auth')

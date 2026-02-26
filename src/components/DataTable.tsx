@@ -33,6 +33,112 @@ interface DataTableProps<T> {
   pageSizeOptions?: number[];
   emptyMessage?: string;
   isLoading?: boolean;
+  /** Paginación en el servidor: total de páginas desde el backend */
+  totalPages?: number;
+  /** Página actual (controlada desde fuera) */
+  currentPage?: number;
+  /** Callback al cambiar de página (para paginación en servidor) */
+  onPageChange?: (page: number) => void;
+  /** Total de registros (para mostrar "X-Y de Z") */
+  totalItems?: number;
+  /** Mostrar controles de paginación también arriba de la tabla */
+  showPaginationTop?: boolean;
+  /** Tamaño de página actual (para paginación servidor) */
+  pageSize?: number;
+  /** Callback al cambiar tamaño de página */
+  onPageSizeChange?: (size: number) => void;
+}
+
+function PaginationBar<T>({
+  pageSize,
+  pageSizeOptions,
+  currentPage,
+  totalPages,
+  totalItems,
+  onPageChange,
+  onPageSizeChange,
+  serverSide,
+}: {
+  pageSize: number | 'all';
+  pageSizeOptions: number[];
+  currentPage: number;
+  totalPages: number;
+  totalItems?: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange?: (value: string) => void;
+  serverSide?: boolean;
+}) {
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 py-2">
+      <div className="flex items-center gap-2">
+        <p className="text-sm font-medium text-muted-foreground">Filas por página</p>
+        <Select
+          value={pageSize.toString()}
+          onValueChange={onPageSizeChange || (() => {})}
+        >
+          <SelectTrigger className="h-8 w-[100px]">
+            <SelectValue placeholder={pageSize.toString()} />
+          </SelectTrigger>
+          <SelectContent side="top">
+            {pageSizeOptions.map((option) => (
+              <SelectItem key={option} value={option.toString()}>
+                {option}
+              </SelectItem>
+            ))}
+            {!serverSide && <SelectItem value="all">Todos</SelectItem>}
+          </SelectContent>
+        </Select>
+        {totalItems != null && (
+          <span className="text-sm text-muted-foreground">
+            {totalItems} resultado{totalItems !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-4 lg:gap-8">
+        <div className="flex items-center justify-center text-sm font-medium text-muted-foreground whitespace-nowrap">
+          Página {currentPage} de {totalPages || 1}
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="hidden h-8 w-8 p-0 lg:flex"
+            onClick={() => onPageChange(1)}
+            disabled={currentPage === 1 || totalPages <= 1}
+          >
+            <CaretDoubleLeft size={16} />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => onPageChange(currentPage - 1)}
+            disabled={currentPage === 1 || totalPages <= 1}
+          >
+            <CaretLeft size={16} />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => onPageChange(currentPage + 1)}
+            disabled={currentPage === totalPages || totalPages <= 1}
+          >
+            <CaretRight size={16} />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="hidden h-8 w-8 p-0 lg:flex"
+            onClick={() => onPageChange(totalPages)}
+            disabled={currentPage === totalPages || totalPages <= 1}
+          >
+            <CaretDoubleRight size={16} />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function DataTable<T>({
@@ -41,34 +147,64 @@ export function DataTable<T>({
   onRowClick,
   pageSizeOptions = [10, 15, 20, 100],
   emptyMessage = "No se encontraron resultados.",
-  isLoading = false
+  isLoading = false,
+  totalPages: totalPagesProp,
+  currentPage: currentPageProp,
+  onPageChange: onPageChangeProp,
+  totalItems,
+  showPaginationTop = false,
+  pageSize: pageSizeProp,
+  onPageSizeChange: onPageSizeChangeProp,
 }: DataTableProps<T>) {
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number | 'all'>(pageSizeOptions[0]);
+  const [internalPage, setInternalPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number | 'all'>(pageSizeProp ?? pageSizeOptions[0]);
 
-  const totalPages = pageSize === 'all' ? 1 : Math.ceil(data.length / pageSize);
+  const serverSide = totalPagesProp != null && onPageChangeProp != null && currentPageProp != null;
+  const currentPage = serverSide ? currentPageProp : internalPage;
+  const effectivePageSize = serverSide ? (pageSizeProp ?? pageSizeOptions[0]) : pageSize;
+  const totalPages = serverSide ? (totalPagesProp ?? 1) : (effectivePageSize === 'all' ? 1 : Math.ceil(data.length / (typeof effectivePageSize === 'number' ? effectivePageSize : 1)));
 
-  const paginatedData = pageSize === 'all'
+  const paginatedData = serverSide
     ? data
-    : data.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    : effectivePageSize === 'all'
+      ? data
+      : data.slice((currentPage - 1) * (typeof effectivePageSize === 'number' ? effectivePageSize : 1), currentPage * (typeof effectivePageSize === 'number' ? effectivePageSize : 1));
 
   const handlePageChange = (page: number) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+    if (serverSide && onPageChangeProp) {
+      onPageChangeProp(page);
+    } else {
+      setInternalPage(Math.max(1, Math.min(page, totalPages)));
+    }
   };
 
   const handlePageSizeChange = (value: string) => {
     if (value === 'all') {
       setPageSize('all');
-      setCurrentPage(1);
+      setInternalPage(1);
+      onPageSizeChangeProp?.(pageSizeOptions[0]);
     } else {
-      const size = parseInt(value);
+      const size = parseInt(value, 10);
       setPageSize(size);
-      setCurrentPage(1);
+      setInternalPage(1);
+      onPageSizeChangeProp?.(size);
     }
   };
 
   return (
     <div className="space-y-4">
+      {showPaginationTop && (
+        <PaginationBar
+          pageSize={effectivePageSize}
+          pageSizeOptions={pageSizeOptions}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          serverSide={serverSide}
+        />
+      )}
       <div className="rounded-md border overflow-hidden">
         <Table>
           <TableHeader>
@@ -120,67 +256,16 @@ export function DataTable<T>({
         </Table>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-medium text-muted-foreground">Filas por página</p>
-          <Select
-            value={pageSize.toString()}
-            onValueChange={handlePageSizeChange}
-          >
-            <SelectTrigger className="h-8 w-[100px]">
-              <SelectValue placeholder={pageSize.toString()} />
-            </SelectTrigger>
-            <SelectContent side="top">
-              {pageSizeOptions.map((option) => (
-                <SelectItem key={option} value={option.toString()}>
-                  {option}
-                </SelectItem>
-              ))}
-              <SelectItem value="all">Todos</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="flex items-center gap-4 lg:gap-8">
-          <div className="flex items-center justify-center text-sm font-medium text-muted-foreground whitespace-nowrap">
-            Página {currentPage} de {totalPages || 1}
-          </div>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              className="hidden h-8 w-8 p-0 lg:flex"
-              onClick={() => handlePageChange(1)}
-              disabled={currentPage === 1 || totalPages <= 1}
-            >
-              <CaretDoubleLeft size={16} />
-            </Button>
-            <Button
-              variant="outline"
-              className="h-8 w-8 p-0"
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1 || totalPages <= 1}
-            >
-              <CaretLeft size={16} />
-            </Button>
-            <Button
-              variant="outline"
-              className="h-8 w-8 p-0"
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage === totalPages || totalPages <= 1}
-            >
-              <CaretRight size={16} />
-            </Button>
-            <Button
-              variant="outline"
-              className="hidden h-8 w-8 p-0 lg:flex"
-              onClick={() => handlePageChange(totalPages)}
-              disabled={currentPage === totalPages || totalPages <= 1}
-            >
-              <CaretDoubleRight size={16} />
-            </Button>
-          </div>
-        </div>
-      </div>
+      <PaginationBar
+        pageSize={effectivePageSize}
+        pageSizeOptions={pageSizeOptions}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
+        serverSide={serverSide}
+      />
     </div>
   );
 }

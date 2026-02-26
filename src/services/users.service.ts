@@ -1,9 +1,17 @@
 import type { User } from '@/types/models';
 import { api } from './api.service';
+import { buildStorageUrl } from '@/utils/url.utils';
 
 function mapUserFromApi(data: any): User {
+  // Process photo URL if it's a relative path
+  let photoUrl = data.photo;
+  if (photoUrl && !photoUrl.startsWith('http') && !photoUrl.startsWith('data:')) {
+    photoUrl = buildStorageUrl(photoUrl);
+  }
+
   return {
     ...data,
+    photo: photoUrl,
     roleId: data.role_id ? String(data.role_id) : undefined,
     birthDate: data.birth_date,
     hireDate: data.hire_date,

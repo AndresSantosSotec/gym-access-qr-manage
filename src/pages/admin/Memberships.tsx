@@ -26,11 +26,13 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { DataTable, ColumnDef } from '@/components/DataTable';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { membershipsService } from '@/services/memberships.service';
 import { formatCurrency } from '@/utils/date';
-import { Plus, Pencil, Trash, Eye, EyeSlash, CheckCircle, SpinnerGap } from '@phosphor-icons/react';
+import { Plus, Pencil, Trash, Eye, EyeSlash, CheckCircle, SpinnerGap, CreditCard } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import type { MembershipPlan } from '@/types/models';
+import { ProductosRecurrente } from './memberships/ProductosRecurrente';
 
 export function Memberships() {
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
@@ -236,18 +238,28 @@ export function Memberships() {
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Planes de Membresía</h1>
-          <p className="text-muted-foreground mt-1">
-            Gestiona los planes disponibles para tus clientes
-          </p>
-        </div>
-        <Button onClick={handleOpenNew} className="gap-2">
-          <Plus size={20} />
-          Nuevo Plan
-        </Button>
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Membresías</h1>
+        <p className="text-muted-foreground mt-1">
+          Planes y productos de pago (inscripción, Recurrente)
+        </p>
       </div>
+
+      <Tabs defaultValue="plans" className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="plans">Planes de Membresía</TabsTrigger>
+          <TabsTrigger value="productos">
+            <CreditCard size={16} className="mr-2" />
+            Productos de Pago
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="plans" className="space-y-6 mt-6">
+          <div className="flex justify-end">
+            <Button onClick={handleOpenNew} className="gap-2">
+              <Plus size={20} />
+              Nuevo Plan
+            </Button>
+          </div>
 
       <Card>
         <CardHeader>
@@ -442,6 +454,11 @@ export function Memberships() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+        </TabsContent>
+        <TabsContent value="productos" className="mt-6">
+          <ProductosRecurrente />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

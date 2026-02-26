@@ -19,6 +19,7 @@ import {
   Receipt,
   Terminal,
   X,
+  Ticket,
 } from '@phosphor-icons/react';
 import { can } from '@/services/permissions';
 import type { PermissionKey } from '@/types/models';
@@ -43,6 +44,7 @@ const menuItems: MenuItem[] = [
   { to: '/admin/clients', icon: Users, label: 'Clientes', permission: 'CLIENTS_VIEW' },
   { to: '/admin/leads', icon: UsersFour, label: 'Leads', permission: 'CLIENTS_VIEW' },
   { to: '/admin/memberships', icon: CreditCard, label: 'Membresías', permission: 'MEMBERSHIPS_VIEW' },
+  { to: '/admin/registration-products', icon: Ticket, label: 'Inscripciones', permission: 'MEMBERSHIPS_VIEW' },
   { to: '/admin/payments', icon: Money, label: 'Pagos', permission: 'PAYMENTS_VIEW' },
   { to: '/admin/receipts', icon: Receipt, label: 'Recibos y Facturas', permission: 'PAYMENTS_VIEW' },
   { to: '/admin/staff', icon: UserList, label: 'Personal y Staff', permission: 'USERS_VIEW' },

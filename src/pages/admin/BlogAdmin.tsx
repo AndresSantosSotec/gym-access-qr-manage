@@ -27,6 +27,7 @@ import {
 import { DataTable, ColumnDef } from '@/components/DataTable';
 import { blogService } from '@/services/blog.service';
 import { formatDate } from '@/utils/date';
+import { buildStorageUrl } from '@/utils/url.utils';
 import { Plus, Pencil, Trash, Eye, EyeSlash, Spinner } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import type { BlogPost } from '@/types/blog';
@@ -90,7 +91,7 @@ export function BlogAdmin() {
     setContent(post.content);
     setStatus(post.status);
     setSelectedImage(null);
-    setPreviewImage(post.featured_image ? /^http/.test(post.featured_image) ? post.featured_image : `/storage/${post.featured_image}` : null);
+    setPreviewImage(post.featured_image ? buildStorageUrl(post.featured_image) : null);
     setGalleryImages([]);
     setExistingGallery(post.images || []);
     setRemovedImageIds([]);
@@ -368,7 +369,7 @@ export function BlogAdmin() {
                   {existingGallery.map((img) => (
                     <div key={img.id} className="relative group aspect-square bg-muted rounded-md overflow-hidden">
                       <img
-                        src={`/storage/${img.image_path}`}
+                        src={buildStorageUrl(img.image_path)}
                         alt="Galería"
                         className="w-full h-full object-cover"
                       />

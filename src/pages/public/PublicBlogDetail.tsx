@@ -8,6 +8,7 @@ import { PublicFooter } from '@/components/PublicFooter';
 import { blogService } from '@/services/blog.service';
 import { ArrowLeft, Calendar } from '@phosphor-icons/react';
 import { formatDate } from '@/utils/date';
+import { buildStorageUrl } from '@/utils/url.utils';
 import type { BlogPost } from '@/types/blog';
 
 export function PublicBlogDetail() {
@@ -95,7 +96,7 @@ export function PublicBlogDetail() {
                       <CarouselItem key={img.id}>
                         <div className="relative aspect-video w-full overflow-hidden rounded-lg">
                           <img
-                            src={img.isFeatured && /^http/.test(img.image_path) ? img.image_path : `/storage/${img.image_path}`}
+                            src={buildStorageUrl(img.image_path)}
                             alt={post.title}
                             className="object-cover w-full h-full"
                           />

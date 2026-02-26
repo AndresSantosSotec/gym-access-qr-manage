@@ -1,18 +1,13 @@
 import { api } from './api.service';
 import type { Client } from '@/types/models';
+import { buildStorageUrl } from '@/utils/url.utils';
 
 // Helper transform function
 const mapClientFromBackend = (data: any): Client => {
   // Construct full photo URL if exists
   let profilePhoto: string | undefined = undefined;
   if (data.photo_url) {
-    if (data.photo_url.startsWith('http')) {
-      profilePhoto = data.photo_url;
-    } else {
-      // Assuming storage is served from /storage
-      const storageUrl = import.meta.env.VITE_STORAGE_URL || 'http://localhost:8000/storage';
-      profilePhoto = `${storageUrl}/${data.photo_url}`;
-    }
+    profilePhoto = buildStorageUrl(data.photo_url);
   } else if (data.profile_photo_url) {
     // Laravel Jetstream/common convention
     profilePhoto = data.profile_photo_url;
@@ -37,22 +32,74 @@ const mapClientFromBackend = (data: any): Client => {
   };
 };
 
+export interface ClientsListParams {
+  search?: string;
+  per_page?: number;
+  page?: number;
+  status?: string;
+  active_membership?: boolean;
+  expired_membership?: boolean;
+  has_fingerprint?: boolean;
+  gender?: string;
+  sort_by?: string;
+  sort_dir?: 'asc' | 'desc';
+}
+
+export interface ClientsPaginatedResponse {
+  data: Client[];
+  meta: {
+    current_page: number;
+    last_page: number;
+    total: number;
+    per_page: number;
+  };
+}
+
 export const clientsService = {
-  getAll: async (params?: { search?: string; per_page?: number }): Promise<Client[]> => {
+  getAll: async (params?: ClientsListParams): Promise<Client[]> => {
     try {
       const response = await api.get('/clients', {
         params: {
           ...params,
-          per_page: params?.per_page || 100
+          per_page: params?.per_page ?? 100
         }
       });
-
-      // Handle Laravel Pagination response
       const items = response.data.data || [];
       return items.map(mapClientFromBackend);
     } catch (error) {
       console.error('Error fetching clients:', error);
       return [];
+    }
+  },
+
+  /** Listado paginado con filtros (para la pantalla de clientes con paginación en servidor) */
+  getPaginated: async (params: ClientsListParams = {}): Promise<ClientsPaginatedResponse> => {
+    try {
+      const response = await api.get('/clients', {
+        params: {
+          search: params.search || undefined,
+          page: params.page ?? 1,
+          per_page: params.per_page ?? 15,
+          status: params.status ? String(params.status).toLowerCase() : undefined,
+          active_membership: params.active_membership,
+          expired_membership: params.expired_membership,
+          has_fingerprint: params.has_fingerprint,
+          gender: params.gender || undefined,
+          sort_by: params.sort_by || undefined,
+          sort_dir: params.sort_dir || undefined
+        }
+      });
+      const items = (response.data.data || []).map(mapClientFromBackend);
+      const meta = {
+        current_page: response.data.current_page ?? 1,
+        last_page: response.data.last_page ?? 1,
+        total: response.data.total ?? 0,
+        per_page: response.data.per_page ?? 15
+      };
+      return { data: items, meta };
+    } catch (error) {
+      console.error('Error fetching clients (paginated):', error);
+      return { data: [], meta: { current_page: 1, last_page: 1, total: 0, per_page: params.per_page ?? 15 } };
     }
   },
 

@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Upload, X, Image as ImageIcon, Trash } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { api } from '@/services/api.service';
+import { buildStorageUrl, getStorageUrl } from '@/utils/url.utils';
 
 interface ImageUploaderProps {
   images: string[];
@@ -84,7 +85,8 @@ export function ImageUploader({ images, onChange, maxImages = 5, label = 'Imáge
     
     try {
       // Intentar eliminar del servidor (solo si es una URL del servidor)
-      if (imageUrl.includes('/storage/')) {
+      const storageUrl = getStorageUrl();
+      if (imageUrl.includes('/storage/') || imageUrl.includes(storageUrl)) {
         await api.delete('/site-settings/hero-image', {
           data: { url: imageUrl },
         });

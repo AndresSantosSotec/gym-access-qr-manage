@@ -16,7 +16,10 @@ import { membershipsService } from '@/services/memberships.service';
 import { paymentsService } from '@/services/payments.service';
 import { cashService } from '@/services/cash.service';
 import { recurrenteService } from '@/services/recurrente.service';
+import { recurrenteProductosService } from '@/services/recurrente-productos.service';
+import { registrationProductsService } from '@/services/registration-products.service';
 import { RecurrenteCheckoutEmbed } from './RecurrenteCheckoutEmbed';
+import { PasoSeleccionProductos, type ProductoPagoItem } from '@/components/memberships/PasoSeleccionProductos';
 import type { MembershipPlan } from '@/types/models';
 import { Check, Camera, Upload, X, Fingerprint, CreditCard, MagnifyingGlass, ArrowSquareOut } from '@phosphor-icons/react';
 import { toast } from 'sonner';
@@ -63,8 +66,14 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
   const [transferDate, setTransferDate] = useState(new Date().toISOString().split('T')[0]);
   const [transferDocument, setTransferDocument] = useState<string>('');
 
-  const [inscriptionFee, setInscriptionFee] = useState<number>(0);
   const [planSearch, setPlanSearch] = useState('');
+
+  // Productos de inscripción: del módulo Registration Products (/admin/registration-products)
+  const [productosPago, setProductosPago] = useState<ProductoPagoItem[]>([]);
+  const [selectedProductoIds, setSelectedProductoIds] = useState<number[]>([]);
+  const inscriptionFee = productosPago
+    .filter((p) => selectedProductoIds.includes(p.id))
+    .reduce((s, p) => s + p.monto_quetzales, 0);
 
   const activePlans = plans.filter(p => p.published);
   const filteredPlans = activePlans.filter(p =>
@@ -81,6 +90,53 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
       setPaymentMethod('RECURRENTE');
     }
   }, [autoRenew]);
+
+  // Cargar productos de inscripción (Registration Products + Recurrente Productos) al abrir el modal
+  useEffect(() => {
+    if (open) {
+      loadProductosPago();
+    }
+  }, [open]);
+
+  const loadProductosPago = async () => {
+    try {
+      const [regProducts, recurProducts] = await Promise.all([
+        registrationProductsService.getPublic(),
+        recurrenteProductosService.getProductos({ activo: true }).catch(() => []),
+      ]);
+      const items: ProductoPagoItem[] = [
+        ...regProducts
+          .filter((p) => p.price >= 0)
+          .map((p) => ({
+            id: p.id,
+            nombre: p.name,
+            monto_centavos: Math.round(p.price * 100),
+            monto_quetzales: p.price,
+            tipo: 'inscripcion' as const,
+          })),
+        ...recurProducts.map((p) => ({
+          id: p.id + 100000, // offset para no colisionar con registration ids
+          nombre: p.nombre,
+          monto_centavos: p.monto_centavos,
+          monto_quetzales: p.monto_quetzales,
+          tipo: p.tipo,
+        })),
+      ];
+      setProductosPago(items);
+    } catch (error) {
+      console.error('Error loading productos de pago:', error);
+    }
+  };
+
+  const toggleProducto = (id: number) => {
+    setSelectedProductoIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  // Para checkout: separar IDs de registration (1-99999) vs recurrente (100000+)
+  const selectedRegistrationProductIds = selectedProductoIds.filter((id) => id < 100000);
+  const selectedRecurrenteProductoIds = selectedProductoIds.filter((id) => id >= 100000).map((id) => id - 100000);
 
   const handleReset = () => {
     setStep(1);
@@ -103,8 +159,8 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
     setPaymentReference('');
     setTransferDate(new Date().toISOString().split('T')[0]);
     setTransferDocument('');
-    setInscriptionFee(0);
     setPlanSearch('');
+    setSelectedProductoIds([]);
   };
 
   const handleClose = () => {
@@ -227,12 +283,18 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
 
       setCheckoutClientId(Number(newClient.id));
 
-      // 2. Obtener URL de checkout de Recurrente
-      const checkoutResponse = await recurrenteService.createCheckout(
+      // 2. Obtener URL de checkout de Recurrente (plan + productos seleccionados)
+      const successUrl = `${window.location.origin}/p/pago-exitoso?client_id=${newClient.id}`;
+      const cancelUrl = `${window.location.origin}/p/pago-fallido`;
+      const checkoutResponse = await recurrenteProductosService.createCheckoutProductos(
         Number(newClient.id),
-        parseInt(selectedPlanId, 10),
-        `${window.location.origin}/p/pago-exitoso?client_id=${newClient.id}`,
-        `${window.location.origin}/p/pago-fallido`,
+        {
+          planId: parseInt(selectedPlanId, 10),
+          registrationProductIds: selectedRegistrationProductIds.length > 0 ? selectedRegistrationProductIds : undefined,
+          productoIds: selectedRecurrenteProductoIds.length > 0 ? selectedRecurrenteProductoIds : undefined,
+          successUrl,
+          cancelUrl,
+        }
       );
 
       console.log('[DEBUG] Recurrente checkout response completo:', checkoutResponse);
@@ -786,29 +848,13 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-4">
-                          <Label htmlFor="inscriptionFee" className="min-w-fit">Cuota de Inscripción</Label>
-                          <div className="relative w-full max-w-[200px]">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">Q</span>
-                            <Input
-                              id="inscriptionFee"
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              className="pl-8"
-                              value={inscriptionFee || ''}
-                              onChange={(e) => setInscriptionFee(Number(e.target.value))}
-                              placeholder="0.00"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="pt-4 border-t flex items-center justify-between">
-                          <div className="text-right flex-1">
-                            <p className="text-sm text-muted-foreground uppercase tracking-wider font-semibold">Total a Pagar Hoy</p>
-                            <p className="font-bold text-3xl text-primary">Q{(selectedPlan?.price || 0) + (inscriptionFee || 0)}</p>
-                          </div>
-                        </div>
+                        <PasoSeleccionProductos
+                          productos={productosPago}
+                          productosSeleccionados={selectedProductoIds}
+                          onToggle={toggleProducto}
+                          totalProductos={productosPago.length}
+                          planPrice={selectedPlan?.price ?? 0}
+                        />
                       </CardContent>
                     </Card>
 
@@ -1039,7 +1085,11 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
                 onClick={() => handleFinish()}
                 disabled={isSubmitting || (selectedPlanId !== '' && paymentMethod === 'RECURRENTE')}
               >
-                {isSubmitting ? 'Creando...' : 'Finalizar'}
+                {isSubmitting
+                  ? 'Creando...'
+                  : selectedPlanId
+                    ? `Procesar Pago Q ${((selectedPlan?.price ?? 0) + inscriptionFee).toFixed(2)}`
+                    : 'Finalizar'}
               </Button>
             )}
           </div>

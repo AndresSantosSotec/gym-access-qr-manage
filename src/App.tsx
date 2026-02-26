@@ -28,6 +28,7 @@ import { Inventory } from '@/pages/admin/commercial/Inventory';
 import { Sales } from '@/pages/admin/commercial/Sales';
 import { SalesHistory } from '@/pages/admin/commercial/SalesHistory';
 import { Catalogs } from '@/pages/admin/commercial/Catalogs';
+import { RegistrationProducts } from '@/pages/admin/RegistrationProducts';
 import { QrPass } from '@/pages/public/QrPass';
 import { PublicHome } from '@/pages/public/PublicHome';
 import { PublicPlans } from '@/pages/public/PublicPlans';
@@ -108,6 +109,7 @@ function App() {
             <Route path="memberships/riesgo" element={<MembresiaRiesgo />} />
             <Route path="memberships/:membershipId/pausar" element={<PausarMembresia />} />
             <Route path="clients/:clientId/reactivar-cobro" element={<ReactivarCobro />} />
+            <Route path="registration-products" element={<RegistrationProducts />} />
           </Route>
 
           <Route element={<PermissionGuard permission="PAYMENTS_VIEW" />}>

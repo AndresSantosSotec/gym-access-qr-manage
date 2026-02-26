@@ -314,11 +314,6 @@ export function HelpChatbot() {
         <>
             {/* ── Botón flotante ── */}
             <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
-                {!isOpen && (
-                    <div className="bg-primary text-primary-foreground text-xs px-3 py-1 rounded-full shadow-lg animate-bounce">
-                        ¿Necesitas ayuda?
-                    </div>
-                )}
                 <Button
                     onClick={() => {
                         setIsOpen(!isOpen);

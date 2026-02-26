@@ -33,6 +33,7 @@ import { membershipsService } from '@/services/memberships.service';
 import { receiptsService } from '@/services/receipts.service';
 import { can } from '@/services/permissions';
 import { formatCurrency, formatDate } from '@/utils/date';
+import { buildStorageUrl } from '@/utils/url.utils';
 import {
   CreditCard,
   Money,
@@ -1130,7 +1131,7 @@ function PaymentsHistoryTab() {
                         {p.document_url && (
                           <div className="flex gap-1 justify-center">
                             <a
-                              href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/storage/${p.document_url}`}
+                              href={buildStorageUrl(p.document_url)}
                               target="_blank"
                               rel="noreferrer"
                               className="text-xs text-blue-600 hover:underline flex items-center gap-1 mt-1"

@@ -1,8 +1,9 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { storage, STORAGE_KEYS } from '@/utils/storage';
 import type { AuthState } from '@/types/models';
+import { getApiUrl } from '@/utils/url.utils';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_URL = getApiUrl();
 
 // Crear instancia de axios
 const apiClient: AxiosInstance = axios.create({

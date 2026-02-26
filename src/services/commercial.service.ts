@@ -1,4 +1,5 @@
 import { api } from './api.service';
+import { buildStorageUrl } from '@/utils/url.utils';
 import type {
     Producto,
     MovimientoInventario,
@@ -8,6 +9,16 @@ import type {
     Presentacion,
     MetodoPago
 } from '@/types/models';
+
+// Helper para procesar URLs de imágenes de productos
+function mapProductFromApi(product: any): Producto {
+    return {
+        ...product,
+        image_url: product.image_url && !product.image_url.startsWith('http') && !product.image_url.startsWith('data:')
+            ? buildStorageUrl(product.image_url)
+            : product.image_url
+    };
+}
 
 export const commercialService = {
     // Lookups
@@ -19,15 +30,15 @@ export const commercialService = {
     // Productos
     getProducts: async () => {
         const response = await api.get<Producto[]>('/productos');
-        return response.data;
+        return response.data.map(mapProductFromApi);
     },
     createProduct: async (data: Partial<Producto>) => {
         const response = await api.post<Producto>('/productos', data);
-        return response.data;
+        return mapProductFromApi(response.data);
     },
     updateProduct: async (id: number, data: Partial<Producto>) => {
         const response = await api.patch<Producto>(`/productos/${id}`, data);
-        return response.data;
+        return mapProductFromApi(response.data);
     },
     deleteProduct: async (id: number) => {
         await api.delete(`/productos/${id}`);

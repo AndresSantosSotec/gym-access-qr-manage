@@ -53,7 +53,9 @@ export interface RecurrenteClientStatus {
 //  Servicio
 // ─────────────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+import { getApiUrl } from '@/utils/url.utils';
+
+const API_BASE = getApiUrl();
 
 export const recurrenteService = {
 
