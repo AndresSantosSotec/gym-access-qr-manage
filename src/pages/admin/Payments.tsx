@@ -54,6 +54,7 @@ import {
   Trash,
   Envelope,
   DeviceMobile,
+  FileArrowDown,
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -832,8 +833,9 @@ function PaymentsHistoryTab() {
   const [nitInputValue, setNitInputValue] = useState('');
   const [savingNit, setSavingNit] = useState(false);
 
-  // Filtro por día y paginación
+  // Filtro por día o rango y paginación
   const [filterDate, setFilterDate] = useState<string>('');
+  const [filterDateTo, setFilterDateTo] = useState<string>('');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(15);
   const [totalItems, setTotalItems] = useState(0);
@@ -853,17 +855,52 @@ function PaymentsHistoryTab() {
 
   useEffect(() => {
     loadPayments();
-  }, [page, perPage, filterDate]);
+  }, [page, perPage, filterDate, filterDateTo]);
 
   useEffect(() => {
-    if (filterDate) {
-      api.get('/payments/revenue', { params: { from: filterDate, to: filterDate } })
+    if (filterDate || filterDateTo) {
+      const from = filterDate || filterDateTo;
+      const to = filterDateTo || filterDate || filterDateTo;
+      api.get('/payments/revenue', { params: { from, to } })
         .then((res) => setRevenueByDay(res.data))
         .catch(() => setRevenueByDay(null));
     } else {
       setRevenueByDay(null);
     }
-  }, [filterDate]);
+  }, [filterDate, filterDateTo]);
+
+  const [downloadingCorte, setDownloadingCorte] = useState(false);
+
+  const handleDownloadCorteCaja = async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const from = filterDate || today;
+    const to = filterDateTo || filterDate || today;
+    setDownloadingCorte(true);
+    try {
+      const res = await api.get('/payments/corte-caja/pdf', {
+        params: { from, to },
+        responseType: 'blob',
+      });
+      const blob = res.data;
+      if (!(blob instanceof Blob) || blob.size === 0) {
+        toast.error('No se pudo generar el reporte');
+        return;
+      }
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `corte-caja-${from}${from !== to ? `_a_${to}` : ''}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Corte de caja descargado');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'Error al descargar el reporte');
+    } finally {
+      setDownloadingCorte(false);
+    }
+  };
 
   const handleDeletePayment = async (p: { id: number }) => {
     if (!confirm('¿Eliminar este pago y los recibos/facturas asociados? Esta acción no se puede deshacer.')) return;
@@ -892,7 +929,12 @@ function PaymentsHistoryTab() {
     try {
       setIsLoading(true);
       const params: Record<string, string | number> = { page, per_page: perPage };
-      if (filterDate) params.date = filterDate;
+      if (filterDate && filterDateTo) {
+        params.date_from = filterDate;
+        params.date_to = filterDateTo;
+      } else if (filterDate) {
+        params.date = filterDate;
+      }
       const response = await api.get('/payments', { params });
       const data = response.data;
       setPayments(data.data || []);
@@ -1172,10 +1214,10 @@ function PaymentsHistoryTab() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-lg">Ver pagos por día</CardTitle>
-          <CardDescription>Filtra el historial por una fecha y revisa los ingresos de ese día</CardDescription>
+          <CardDescription>Filtra por fecha o rango de fechas, revisa ingresos y descarga el corte de caja en PDF</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="flex items-center gap-2">
+        <CardContent className="flex flex-col sm:flex-row sm:items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             <CalendarBlank size={20} className="text-muted-foreground" />
             <Input
               type="date"
@@ -1184,17 +1226,54 @@ function PaymentsHistoryTab() {
                 setFilterDate(e.target.value);
                 setPage(1);
               }}
-              className="w-[180px]"
+              className="w-[160px]"
+              placeholder="Desde"
             />
-            {filterDate && (
-              <Button variant="outline" size="sm" onClick={() => { setFilterDate(''); setPage(1); }}>
+            <span className="text-muted-foreground text-sm">–</span>
+            <Input
+              type="date"
+              value={filterDateTo}
+              onChange={(e) => {
+                setFilterDateTo(e.target.value);
+                setPage(1);
+              }}
+              className="w-[160px]"
+              placeholder="Hasta"
+            />
+            {(filterDate || filterDateTo) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setFilterDate('');
+                  setFilterDateTo('');
+                  setPage(1);
+                }}
+              >
                 Limpiar
               </Button>
             )}
+            <Button
+              variant="secondary"
+              size="sm"
+              className="gap-1.5"
+              onClick={handleDownloadCorteCaja}
+              disabled={downloadingCorte}
+              title="Descargar reporte de corte de caja (PDF) del día o rango seleccionado"
+            >
+              {downloadingCorte ? (
+                <ArrowsClockwise size={16} className="animate-spin" />
+              ) : (
+                <FileArrowDown size={16} />
+              )}
+              Corte de caja
+            </Button>
           </div>
-          {filterDate && revenueByDay !== null && (
+          {(filterDate || filterDateTo) && revenueByDay !== null && (
             <div className="flex items-center gap-4 px-4 py-2 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
-              <span className="text-sm font-medium text-green-800 dark:text-green-200">Ingresos del día:</span>
+              <span className="text-sm font-medium text-green-800 dark:text-green-200">
+                {filterDateTo && filterDate !== filterDateTo ? 'Ingresos del periodo:' : 'Ingresos del día:'}
+              </span>
               <span className="text-xl font-bold text-green-700 dark:text-green-300">
                 {formatCurrency(revenueByDay.total_revenue)}
               </span>
@@ -1213,7 +1292,11 @@ function PaymentsHistoryTab() {
             <div>
               <CardTitle>Historial de Pagos</CardTitle>
               <CardDescription>
-                {filterDate ? `Pagos del ${new Date(filterDate + 'T12:00:00').toLocaleDateString('es-GT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}` : 'Todos los pagos registrados'}
+                {filterDate || filterDateTo
+                  ? filterDateTo && filterDate !== filterDateTo
+                    ? `Pagos del ${new Date(filterDate + 'T12:00:00').toLocaleDateString('es-GT', { day: 'numeric', month: 'short', year: 'numeric' })} al ${new Date(filterDateTo + 'T12:00:00').toLocaleDateString('es-GT', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                    : `Pagos del ${new Date((filterDate || filterDateTo) + 'T12:00:00').toLocaleDateString('es-GT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`
+                  : 'Todos los pagos registrados'}
               </CardDescription>
             </div>
             <Button className="gap-2 bg-green-600 hover:bg-green-700" onClick={() => setNewPaymentOpen(true)}>
@@ -1340,7 +1423,7 @@ function PaymentsHistoryTab() {
                 {payments.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
-                      {filterDate ? 'No hay pagos en esta fecha' : 'No hay pagos registrados'}
+                      {(filterDate || filterDateTo) ? 'No hay pagos en el periodo seleccionado' : 'No hay pagos registrados'}
                     </TableCell>
                   </TableRow>
                 )}
