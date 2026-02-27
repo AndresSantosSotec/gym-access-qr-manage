@@ -60,12 +60,6 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import type { PaymentInstallment } from '@/types/models';
 
 // ─── Helpers ───
@@ -1317,42 +1311,36 @@ function PaymentsHistoryTab() {
                 Limpiar
               </Button>
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="gap-1.5"
-                  disabled={downloadingCorte || downloadingCorteExcel}
-                  title="Descargar corte de caja (PDF o Excel)"
-                >
-                  {(downloadingCorte || downloadingCorteExcel) ? (
-                    <ArrowsClockwise size={16} className="animate-spin" />
-                  ) : (
-                    <FileArrowDown size={16} />
-                  )}
-                  Corte de caja
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={handleDownloadCorteCajaPdf}
-                  disabled={downloadingCorte}
-                  className="gap-2"
-                >
-                  <FileText size={16} />
-                  Descargar PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleDownloadCorteCajaExcel}
-                  disabled={downloadingCorteExcel}
-                  className="gap-2"
-                >
-                  <FileArrowDown size={16} />
-                  Descargar Excel
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="gap-1.5"
+              onClick={handleDownloadCorteCajaPdf}
+              disabled={downloadingCorte}
+              title="Generar y descargar corte de caja en PDF"
+            >
+              {downloadingCorte ? (
+                <ArrowsClockwise size={16} className="animate-spin" />
+              ) : (
+                <FileText size={16} />
+              )}
+              Corte de caja (PDF)
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="gap-1.5"
+              onClick={handleDownloadCorteCajaExcel}
+              disabled={downloadingCorteExcel}
+              title="Generar y descargar corte de caja en Excel"
+            >
+              {downloadingCorteExcel ? (
+                <ArrowsClockwise size={16} className="animate-spin" />
+              ) : (
+                <FileArrowDown size={16} />
+              )}
+              Corte de caja (Excel)
+            </Button>
           </div>
           {(filterDate || filterDateTo) && revenueByDay !== null && (
             <div className="flex items-center gap-4 px-4 py-2 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
