@@ -950,13 +950,21 @@ function PaymentsHistoryTab() {
     }
   };
 
-  const handleDownloadReceipt = async (paymentId: number) => {
+  /** Obtiene el recibo del pago o lo genera con los datos del pago y del cliente (facturación). */
+  const getOrCreateReceiptForPayment = async (p: { id: number; membership_id?: number | null }): Promise<{ id: number; receipt_number?: string } | null> => {
+    const res = await receiptsService.getAll({ payment_id: p.id, per_page: 1 });
+    const list = (res as any).data ?? [];
+    if (list[0]?.id) return list[0];
+    const paymentType = p.membership_id ? 'subscription' : 'individual_payment';
+    const created = await receiptsService.createFromPayment(p.id, 'receipt', paymentType);
+    return created as { id: number; receipt_number?: string };
+  };
+
+  const handleDownloadReceipt = async (p: { id: number; membership_id?: number | null }) => {
     try {
-      const res = await receiptsService.getAll({ payment_id: paymentId, per_page: 1 });
-      const list = (res as any).data ?? [];
-      const receipt = list[0];
+      const receipt = await getOrCreateReceiptForPayment(p);
       if (!receipt?.id) {
-        toast.info('No hay recibo disponible para este pago');
+        toast.error('No se pudo generar el recibo para este pago');
         return;
       }
       const blob = await receiptsService.downloadReceiptPdf(receipt.id);
@@ -967,7 +975,7 @@ function PaymentsHistoryTab() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `recibo-${receipt.receipt_number ?? paymentId}.pdf`;
+      a.download = `recibo-${receipt.receipt_number ?? p.id}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -982,11 +990,9 @@ function PaymentsHistoryTab() {
 
   const handleOpenEmailDialog = async (p: any) => {
     try {
-      const res = await receiptsService.getAll({ payment_id: p.id, per_page: 1 });
-      const list = (res as any).data ?? [];
-      const receipt = list[0];
+      const receipt = await getOrCreateReceiptForPayment(p);
       if (!receipt?.id) {
-        toast.info('No hay recibo disponible para este pago. Genera uno primero.');
+        toast.error('No se pudo generar el recibo para este pago');
         return;
       }
       const clientId = p.client_id ?? p.client?.id;
@@ -1049,13 +1055,11 @@ function PaymentsHistoryTab() {
     }
   };
 
-  const handlePrintTicket = async (paymentId: number) => {
+  const handlePrintTicket = async (p: { id: number; membership_id?: number | null }) => {
     try {
-      const res = await receiptsService.getAll({ payment_id: paymentId, per_page: 1 });
-      const list = (res as any).data ?? [];
-      const receipt = list[0];
+      const receipt = await getOrCreateReceiptForPayment(p);
       if (!receipt?.id) {
-        toast.info('No hay recibo disponible para este pago');
+        toast.error('No se pudo generar el recibo para este pago');
         return;
       }
       const html = await receiptsService.previewTicket(receipt.id);
@@ -1272,7 +1276,7 @@ function PaymentsHistoryTab() {
                             size="sm"
                             variant="outline"
                             className="gap-1.5"
-                            onClick={() => handleDownloadReceipt(p.id)}
+                            onClick={() => handleDownloadReceipt(p)}
                             title="Descargar Recibo PDF"
                           >
                             <Download size={14} />
@@ -1282,7 +1286,7 @@ function PaymentsHistoryTab() {
                             size="sm"
                             variant="outline"
                             className="gap-1"
-                            onClick={() => handlePrintTicket(p.id)}
+                            onClick={() => handlePrintTicket(p)}
                             title="Imprimir Ticket 80mm"
                           >
                             <Printer size={14} />
