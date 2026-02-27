@@ -873,19 +873,22 @@ function PaymentsHistoryTab() {
   const [downloadingCorte, setDownloadingCorte] = useState(false);
   const [downloadingCorteExcel, setDownloadingCorteExcel] = useState(false);
 
-  const getCorteCajaDates = () => {
+  const getCorteCajaParams = () => {
     const today = new Date().toISOString().slice(0, 10);
     const from = filterDate || today;
     const to = filterDateTo || filterDate || today;
-    return { from, to };
+    const params: Record<string, string> = { from, to };
+    if (filterPaymentMethod) params.method = filterPaymentMethod;
+    return params;
   };
 
   const handleDownloadCorteCajaPdf = async () => {
-    const { from, to } = getCorteCajaDates();
+    const params = getCorteCajaParams();
+    const { from, to } = params;
     setDownloadingCorte(true);
     try {
       const res = await api.get('/payments/corte-caja/pdf', {
-        params: { from, to },
+        params,
         responseType: 'blob',
       });
       const blob = res.data;
@@ -910,11 +913,12 @@ function PaymentsHistoryTab() {
   };
 
   const handleDownloadCorteCajaExcel = async () => {
-    const { from, to } = getCorteCajaDates();
+    const params = getCorteCajaParams();
+    const { from, to } = params;
     setDownloadingCorteExcel(true);
     try {
       const res = await api.get('/payments/corte-caja/excel', {
-        params: { from, to },
+        params,
         responseType: 'blob',
       });
       const blob = res.data;
@@ -1150,11 +1154,14 @@ function PaymentsHistoryTab() {
       }
       const receipt = result.receipt;
       const html = await receiptsService.previewTicket(receipt.id);
-      const printWindow = window.open('', '', 'width=350,height=600');
+      const printWindow = window.open('', '_blank', 'width=420,height=700,scrollbars=yes');
       if (printWindow) {
         printWindow.document.write(html);
         printWindow.document.close();
-        setTimeout(() => printWindow.print(), 300);
+        setTimeout(() => {
+          printWindow.focus();
+          printWindow.print();
+        }, 400);
         toast.success('Ticket listo para imprimir');
       } else {
         toast.error('Permite ventanas emergentes para imprimir');
