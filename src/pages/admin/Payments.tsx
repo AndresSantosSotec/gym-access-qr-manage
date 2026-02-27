@@ -839,9 +839,10 @@ function PaymentsHistoryTab() {
   const [nitInputValue, setNitInputValue] = useState('');
   const [savingNit, setSavingNit] = useState(false);
 
-  // Filtro por día o rango y paginación
+  // Filtro por día o rango, método de pago y paginación
   const [filterDate, setFilterDate] = useState<string>('');
   const [filterDateTo, setFilterDateTo] = useState<string>('');
+  const [filterPaymentMethod, setFilterPaymentMethod] = useState<string>('');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(15);
   const [totalItems, setTotalItems] = useState(0);
@@ -861,7 +862,7 @@ function PaymentsHistoryTab() {
 
   useEffect(() => {
     loadPayments();
-  }, [page, perPage, filterDate, filterDateTo]);
+  }, [page, perPage, filterDate, filterDateTo, filterPaymentMethod]);
 
   useEffect(() => {
     if (filterDate || filterDateTo) {
@@ -969,13 +970,15 @@ function PaymentsHistoryTab() {
   const loadPayments = async () => {
     try {
       setIsLoading(true);
-      const params: Record<string, string | number> = { page, per_page: perPage };
+      const effectivePerPage = perPage === 9999 ? 9999 : perPage;
+      const params: Record<string, string | number> = { page, per_page: effectivePerPage };
       if (filterDate && filterDateTo) {
         params.date_from = filterDate;
         params.date_to = filterDateTo;
       } else if (filterDate) {
         params.date = filterDate;
       }
+      if (filterPaymentMethod) params.method = filterPaymentMethod;
       const response = await api.get('/payments', { params });
       const data = response.data;
       setPayments(data.data || []);
@@ -1281,13 +1284,33 @@ function PaymentsHistoryTab() {
               className="w-[160px]"
               placeholder="Hasta"
             />
-            {(filterDate || filterDateTo) && (
+            <Select
+              value={filterPaymentMethod || 'all'}
+              onValueChange={(v) => {
+                setFilterPaymentMethod(v === 'all' ? '' : v);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[160px] h-9">
+                <SelectValue placeholder="Método de pago" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los métodos</SelectItem>
+                <SelectItem value="cash">Efectivo</SelectItem>
+                <SelectItem value="card">Tarjeta</SelectItem>
+                <SelectItem value="transfer">Transferencia</SelectItem>
+                <SelectItem value="stripe">Stripe</SelectItem>
+                <SelectItem value="recurrente">Recurrente</SelectItem>
+              </SelectContent>
+            </Select>
+            {(filterDate || filterDateTo || filterPaymentMethod) && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
                   setFilterDate('');
                   setFilterDateTo('');
+                  setFilterPaymentMethod('');
                   setPage(1);
                 }}
               >
@@ -1494,20 +1517,36 @@ function PaymentsHistoryTab() {
           </div>
           {/* Paginación */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 py-4 border-t">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm text-muted-foreground">Filas por página</span>
-              <Select value={String(perPage)} onValueChange={(v) => { setPerPage(Number(v)); setPage(1); }}>
-                <SelectTrigger className="h-8 w-[80px]">
-                  <SelectValue />
+              <Select
+                value={perPage === 9999 ? 'all' : String(perPage)}
+                onValueChange={(v) => {
+                  setPerPage(v === 'all' ? 9999 : Number(v));
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="h-8 w-[95px]">
+                  <SelectValue placeholder="Filas" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="10">10</SelectItem>
                   <SelectItem value="15">15</SelectItem>
                   <SelectItem value="25">25</SelectItem>
                   <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
                 </SelectContent>
               </Select>
-              <span className="text-sm text-muted-foreground">{totalItems} resultado{totalItems !== 1 ? 's' : ''}</span>
+              <span className="text-sm text-muted-foreground">
+                {totalItems === 0
+                  ? '0 resultados'
+                  : (() => {
+                      const from = (page - 1) * (perPage === 9999 ? totalItems : perPage) + 1;
+                      const to = perPage === 9999 ? totalItems : Math.min(page * perPage, totalItems);
+                      return `Mostrando ${from} a ${to} de ${totalItems} resultado${totalItems !== 1 ? 's' : ''}`;
+                    })()}
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Página {page} de {lastPage || 1}</span>
