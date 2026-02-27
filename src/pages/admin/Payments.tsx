@@ -31,6 +31,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api } from '@/services/api.service';
 import { membershipsService } from '@/services/memberships.service';
 import { receiptsService } from '@/services/receipts.service';
+import { clientsService } from '@/services/clients.service';
 import { can } from '@/services/permissions';
 import { formatCurrency, formatDate } from '@/utils/date';
 import { buildStorageUrl } from '@/utils/url.utils';
@@ -51,10 +52,13 @@ import {
   Printer,
   FileText,
   Trash,
+  Envelope,
+  DeviceMobile,
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import type { PaymentInstallment } from '@/types/models';
 
 // ─── Helpers ───
@@ -811,10 +815,55 @@ function PaymentsHistoryTab() {
   });
   const [deletingPaymentId, setDeletingPaymentId] = useState<number | null>(null);
 
+  // Enviar comprobante por correo
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailDialogData, setEmailDialogData] = useState<{
+    paymentId: number;
+    receiptId: number;
+    receiptNumber: string;
+    clientId: number;
+    clientEmail: string;
+    clientPhone: string;
+    clientNit: string | null;
+  } | null>(null);
+  const [emailTo, setEmailTo] = useState('');
+  const [emailMessage, setEmailMessage] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [nitInputValue, setNitInputValue] = useState('');
+  const [savingNit, setSavingNit] = useState(false);
+
+  // Filtro por día y paginación
+  const [filterDate, setFilterDate] = useState<string>('');
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(15);
+  const [totalItems, setTotalItems] = useState(0);
+  const [lastPage, setLastPage] = useState(1);
+  const [revenueByDay, setRevenueByDay] = useState<{ total_revenue: number; count: number } | null>(null);
+  const [totalRevenueAll, setTotalRevenueAll] = useState<number | null>(null);
+
   useEffect(() => {
-    loadPayments();
     loadClients();
   }, []);
+
+  useEffect(() => {
+    if (!filterDate) {
+      api.get('/payments/revenue').then((res) => setTotalRevenueAll(res.data.total_revenue ?? 0)).catch(() => setTotalRevenueAll(null));
+    }
+  }, [filterDate]);
+
+  useEffect(() => {
+    loadPayments();
+  }, [page, perPage, filterDate]);
+
+  useEffect(() => {
+    if (filterDate) {
+      api.get('/payments/revenue', { params: { from: filterDate, to: filterDate } })
+        .then((res) => setRevenueByDay(res.data))
+        .catch(() => setRevenueByDay(null));
+    } else {
+      setRevenueByDay(null);
+    }
+  }, [filterDate]);
 
   const handleDeletePayment = async (p: { id: number }) => {
     if (!confirm('¿Eliminar este pago y los recibos/facturas asociados? Esta acción no se puede deshacer.')) return;
@@ -842,10 +891,16 @@ function PaymentsHistoryTab() {
   const loadPayments = async () => {
     try {
       setIsLoading(true);
-      const response = await api.get('/payments', { params: { per_page: 100 } });
-      setPayments(response.data.data || []);
+      const params: Record<string, string | number> = { page, per_page: perPage };
+      if (filterDate) params.date = filterDate;
+      const response = await api.get('/payments', { params });
+      const data = response.data;
+      setPayments(data.data || []);
+      setTotalItems(data.total ?? 0);
+      setLastPage(data.last_page ?? 1);
     } catch (e) {
       toast.error('Error al cargar pagos');
+      setPayments([]);
     } finally {
       setIsLoading(false);
     }
@@ -897,53 +952,130 @@ function PaymentsHistoryTab() {
 
   const handleDownloadReceipt = async (paymentId: number) => {
     try {
-      // Get receipts for this payment
-      const receipts = await api.get(`/receipts?payment_id=${paymentId}`);
-      if (receipts.data.data && receipts.data.data.length > 0) {
-        const receipt = receipts.data.data[0];
-        const blob = await receiptsService.downloadReceiptPdf(receipt.id);
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `recibo-${receipt.receipt_number}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        toast.success('Recibo descargado');
-      } else {
+      const res = await receiptsService.getAll({ payment_id: paymentId, per_page: 1 });
+      const list = (res as any).data ?? [];
+      const receipt = list[0];
+      if (!receipt?.id) {
         toast.info('No hay recibo disponible para este pago');
+        return;
       }
-    } catch (error) {
+      const blob = await receiptsService.downloadReceiptPdf(receipt.id);
+      if (!(blob instanceof Blob) || blob.size === 0) {
+        toast.error('El recibo está vacío o no se pudo generar');
+        return;
+      }
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `recibo-${receipt.receipt_number ?? paymentId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Recibo descargado');
+    } catch (error: any) {
       console.error('Error descargando recibo:', error);
-      toast.error('Error descargando recibo');
+      const msg = error?.response?.data?.message ?? error?.message ?? 'Error descargando recibo';
+      toast.error(msg);
+    }
+  };
+
+  const handleOpenEmailDialog = async (p: any) => {
+    try {
+      const res = await receiptsService.getAll({ payment_id: p.id, per_page: 1 });
+      const list = (res as any).data ?? [];
+      const receipt = list[0];
+      if (!receipt?.id) {
+        toast.info('No hay recibo disponible para este pago. Genera uno primero.');
+        return;
+      }
+      const clientId = p.client_id ?? p.client?.id;
+      const clientEmail = p.client?.email ?? '';
+      const clientPhone = p.client?.phone ?? '';
+      const clientNit = p.client?.nit ?? null;
+      setEmailDialogData({
+        paymentId: p.id,
+        receiptId: receipt.id,
+        receiptNumber: receipt.receipt_number ?? String(receipt.id),
+        clientId: clientId ?? 0,
+        clientEmail,
+        clientPhone,
+        clientNit,
+      });
+      setEmailTo(clientEmail);
+      setEmailMessage('');
+      setNitInputValue(clientNit ?? '');
+      setEmailDialogOpen(true);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'No se pudo cargar el recibo');
+    }
+  };
+
+  const handleSaveClientNit = async () => {
+    if (!emailDialogData?.clientId || !nitInputValue.trim()) return;
+    setSavingNit(true);
+    try {
+      await clientsService.update(String(emailDialogData.clientId), { nit: nitInputValue.trim() });
+      setEmailDialogData((prev) => (prev ? { ...prev, clientNit: nitInputValue.trim() } : null));
+      toast.success('NIT guardado. Aparecerá en el recibo al enviar por correo.');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'Error al guardar el NIT');
+    } finally {
+      setSavingNit(false);
+    }
+  };
+
+  const handleSendReceiptEmail = async () => {
+    if (!emailDialogData || !emailTo.trim()) {
+      toast.error('Ingresa un correo válido');
+      return;
+    }
+    const email = emailTo.trim();
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!re.test(email)) {
+      toast.error('El correo no es válido');
+      return;
+    }
+    setSendingEmail(true);
+    try {
+      await receiptsService.emailReceipt(emailDialogData.receiptId, email, emailMessage.trim() || undefined);
+      toast.success('Comprobante enviado por correo');
+      setEmailDialogOpen(false);
+      setEmailDialogData(null);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'Error al enviar el correo');
+    } finally {
+      setSendingEmail(false);
     }
   };
 
   const handlePrintTicket = async (paymentId: number) => {
     try {
-      const receipts = await api.get(`/receipts?payment_id=${paymentId}`);
-      if (receipts.data.data && receipts.data.data.length > 0) {
-        const receipt = receipts.data.data[0];
-        const html = await receiptsService.previewTicket(receipt.id);
-        const printWindow = window.open('', '', 'width=350,height=600');
-        if (printWindow) {
-          printWindow.document.write(html);
-          printWindow.document.close();
-          setTimeout(() => printWindow.print(), 300);
-        }
+      const res = await receiptsService.getAll({ payment_id: paymentId, per_page: 1 });
+      const list = (res as any).data ?? [];
+      const receipt = list[0];
+      if (!receipt?.id) {
+        toast.info('No hay recibo disponible para este pago');
+        return;
+      }
+      const html = await receiptsService.previewTicket(receipt.id);
+      const printWindow = window.open('', '', 'width=350,height=600');
+      if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+        setTimeout(() => printWindow.print(), 300);
         toast.success('Ticket listo para imprimir');
       } else {
-        toast.info('No hay recibo disponible para este pago');
+        toast.error('Permite ventanas emergentes para imprimir');
       }
-    } catch (error) {
-      toast.error('Error generando ticket');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message ?? 'Error generando ticket');
     }
   };
 
-  const totalRevenue = payments
-    .filter((p) => p.status === 'completed')
-    .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+  const totalRevenue = filterDate && revenueByDay !== null
+    ? revenueByDay.total_revenue
+    : (totalRevenueAll ?? payments.filter((p) => p.status === 'completed').reduce((sum, p) => sum + parseFloat(p.amount || 0), 0));
 
   const filteredClients = clients.filter(c => {
     if (!clientSearch) return true;
@@ -957,7 +1089,7 @@ function PaymentsHistoryTab() {
     );
   });
 
-  const completedCount = payments.filter((p) => p.status === 'completed').length;
+  const completedCount = filterDate ? (revenueByDay?.count ?? 0) : payments.filter((p) => p.status === 'completed').length;
   const pendingCount = payments.filter((p) => p.status === 'pending').length;
   const thisMonth = payments.filter((p) => {
     const date = new Date(p.created_at || p.paid_at);
@@ -1025,13 +1157,53 @@ function PaymentsHistoryTab() {
         </Card>
       </div>
 
+      {/* Filtro por día + Ingresos del día */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg">Ver pagos por día</CardTitle>
+          <CardDescription>Filtra el historial por una fecha y revisa los ingresos de ese día</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-center gap-2">
+            <CalendarBlank size={20} className="text-muted-foreground" />
+            <Input
+              type="date"
+              value={filterDate}
+              onChange={(e) => {
+                setFilterDate(e.target.value);
+                setPage(1);
+              }}
+              className="w-[180px]"
+            />
+            {filterDate && (
+              <Button variant="outline" size="sm" onClick={() => { setFilterDate(''); setPage(1); }}>
+                Limpiar
+              </Button>
+            )}
+          </div>
+          {filterDate && revenueByDay !== null && (
+            <div className="flex items-center gap-4 px-4 py-2 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+              <span className="text-sm font-medium text-green-800 dark:text-green-200">Ingresos del día:</span>
+              <span className="text-xl font-bold text-green-700 dark:text-green-300">
+                {formatCurrency(revenueByDay.total_revenue)}
+              </span>
+              <span className="text-sm text-green-600 dark:text-green-400">
+                ({revenueByDay.count} pago{revenueByDay.count !== 1 ? 's' : ''})
+              </span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Payments Table */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <CardTitle>Historial de Pagos</CardTitle>
-              <CardDescription>Todos los pagos registrados en el sistema</CardDescription>
+              <CardDescription>
+                {filterDate ? `Pagos del ${new Date(filterDate + 'T12:00:00').toLocaleDateString('es-GT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}` : 'Todos los pagos registrados'}
+              </CardDescription>
             </div>
             <Button className="gap-2 bg-green-600 hover:bg-green-700" onClick={() => setNewPaymentOpen(true)}>
               <CurrencyCircleDollar size={16} weight="fill" />
@@ -1115,6 +1287,16 @@ function PaymentsHistoryTab() {
                           >
                             <Printer size={14} />
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1"
+                            onClick={() => handleOpenEmailDialog(p)}
+                            title="Enviar comprobante por correo"
+                          >
+                            <Envelope size={14} />
+                            Correo
+                          </Button>
                           {can('ROLES_MANAGE') && (
                             <Button
                               size="sm"
@@ -1146,13 +1328,40 @@ function PaymentsHistoryTab() {
                 ))}
                 {payments.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
-                      No hay pagos registrados
+                    <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
+                      {filterDate ? 'No hay pagos en esta fecha' : 'No hay pagos registrados'}
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
+          </div>
+          {/* Paginación */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 py-4 border-t">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Filas por página</span>
+              <Select value={String(perPage)} onValueChange={(v) => { setPerPage(Number(v)); setPage(1); }}>
+                <SelectTrigger className="h-8 w-[80px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="15">15</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="text-sm text-muted-foreground">{totalItems} resultado{totalItems !== 1 ? 's' : ''}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Página {page} de {lastPage || 1}</span>
+              <Button variant="outline" size="sm" className="h-8 w-8 p-0" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                ‹
+              </Button>
+              <Button variant="outline" size="sm" className="h-8 w-8 p-0" disabled={page >= lastPage} onClick={() => setPage((p) => p + 1)}>
+                ›
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -1273,6 +1482,101 @@ function PaymentsHistoryTab() {
                 <CurrencyCircleDollar size={16} weight="fill" />
               )}
               Registrar Pago
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Enviar comprobante por correo */}
+      <Dialog open={emailDialogOpen} onOpenChange={(open) => { setEmailDialogOpen(open); if (!open) setEmailDialogData(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enviar comprobante</DialogTitle>
+            <DialogDescription>
+              Envía el recibo por correo al cliente o a otro correo. Si el cliente tiene NIT registrado, el PDF ya lo incluye.
+            </DialogDescription>
+          </DialogHeader>
+          {emailDialogData && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Correo *</Label>
+                <Input
+                  type="email"
+                  value={emailTo}
+                  onChange={(e) => setEmailTo(e.target.value)}
+                  placeholder="correo@ejemplo.com"
+                />
+                {!emailDialogData.clientEmail && (
+                  <p className="text-xs text-muted-foreground">El cliente no tiene correo registrado. Ingresa uno para enviar.</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label>Mensaje (opcional)</Label>
+                <Input
+                  value={emailMessage}
+                  onChange={(e) => setEmailMessage(e.target.value)}
+                  placeholder="Ej: Adjunto tu recibo..."
+                />
+              </div>
+              {emailDialogData.clientPhone && (
+                <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                  <p className="flex items-center gap-2 text-muted-foreground">
+                    <DeviceMobile size={16} />
+                    Teléfono del cliente: <span className="font-medium text-foreground">{emailDialogData.clientPhone}</span>
+                  </p>
+                </div>
+              )}
+              {/* NIT: si tiene, mostrarlo; si no, permitir agregar y guardar */}
+              <div className="space-y-2">
+                <Label>NIT del cliente</Label>
+                {emailDialogData.clientNit ? (
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground">{emailDialogData.clientNit}</span> — incluido en el recibo
+                  </p>
+                ) : emailDialogData.clientId ? (
+                  <>
+                    <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40">
+                      <AlertDescription>
+                        El cliente no tiene NIT registrado. Agrégalo aquí y guarda para que aparezca en el recibo.
+                      </AlertDescription>
+                    </Alert>
+                    <div className="flex gap-2">
+                      <Input
+                        value={nitInputValue}
+                        onChange={(e) => setNitInputValue(e.target.value)}
+                        placeholder="Ej: 12345678-9"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={handleSaveClientNit}
+                        disabled={savingNit || !nitInputValue.trim()}
+                        className="shrink-0"
+                      >
+                        {savingNit ? <ArrowsClockwise size={16} className="animate-spin" /> : <Check size={16} />}
+                        Guardar
+                      </Button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSendReceiptEmail}
+              disabled={sendingEmail || !emailTo.trim()}
+              className="gap-2"
+            >
+              {sendingEmail ? (
+                <ArrowsClockwise size={16} className="animate-spin" />
+              ) : (
+                <Envelope size={16} />
+              )}
+              Enviar por correo
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -70,6 +70,7 @@ export const receiptsService = {
    */
   async getAll(filters?: {
     client_id?: number;
+    payment_id?: number;
     status?: string;
     payment_type?: string;
     is_invoiced?: boolean;
@@ -79,6 +80,7 @@ export const receiptsService = {
     const params = new URLSearchParams();
     
     if (filters?.client_id) params.append('client_id', String(filters.client_id));
+    if (filters?.payment_id) params.append('payment_id', String(filters.payment_id));
     if (filters?.status) params.append('status', filters.status);
     if (filters?.payment_type) params.append('payment_type', filters.payment_type);
     if (filters?.is_invoiced !== undefined) params.append('is_invoiced', String(filters.is_invoiced));
