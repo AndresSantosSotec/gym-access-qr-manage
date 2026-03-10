@@ -1026,6 +1026,15 @@ export function ClientDetail() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="edit-dpi">DPI / Identificación</Label>
+              <Input
+                id="edit-dpi"
+                value={editForm.dpi}
+                onChange={(e) => setEditForm({ ...editForm, dpi: e.target.value })}
+                placeholder="Ej: 1234567890101"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="edit-nit">NIT</Label>
               <Input
                 id="edit-nit"

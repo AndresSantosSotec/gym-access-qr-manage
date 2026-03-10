@@ -50,8 +50,21 @@ export const accessService = {
   },
 
   getRecentLogs: async (limit: number = 10): Promise<AccessLog[]> => {
-    const response = await api.get(`/access/recent?limit=${limit}`);
-    return response.data;
+    try {
+      const response = await api.get(`/access/recent?limit=${limit}`);
+      const raw = Array.isArray(response.data) ? response.data : [];
+      return raw.map((log: any) => ({
+        id: String(log.id),
+        clientId: String(log.client_id),
+        createdAt: log.access_time || log.created_at || new Date().toISOString(),
+        method: log.verification_method === 'fingerprint' ? 'FINGERPRINT' : 'QR',
+        result: (log.status || log.result || 'denied').toUpperCase() === 'ALLOWED' ? 'ALLOWED' : 'DENIED',
+        clientName: log.client?.full_name || log.clientName || undefined,
+      }));
+    } catch (error) {
+      console.error('Error fetching recent access logs:', error);
+      return [];
+    }
   },
 
   getLogsByClient: async (clientId: string): Promise<AccessLog[]> => {

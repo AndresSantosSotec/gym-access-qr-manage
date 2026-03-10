@@ -2,14 +2,15 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ClientCreateWizardModal } from '@/components/ClientCreateWizardModal';
+import { ClientCreateWizardModal, DRAFTS_KEY } from '@/components/ClientCreateWizardModal';
+import type { ClientDraft } from '@/components/ClientCreateWizardModal';
 import { DataTable, ColumnDef } from '@/components/DataTable';
 import { clientsService } from '@/services/clients.service';
 import { membershipsService } from '@/services/memberships.service';
 import { formatShortDate, getDaysRemaining } from '@/utils/date';
-import { MagnifyingGlass, UserPlus, Eye, DotsThree, PencilSimple, Trash, Funnel } from '@phosphor-icons/react';
+import { MagnifyingGlass, UserPlus, Eye, DotsThree, PencilSimple, Trash, Funnel, FloppyDisk, ArrowCounterClockwise, X } from '@phosphor-icons/react';
 import type { Client, MembershipPlan } from '@/types/models';
 import { toast } from 'sonner';
 
@@ -66,6 +67,41 @@ export function ClientsList() {
   const [loading, setLoading] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
+  const [initialDraftSlot, setInitialDraftSlot] = useState<number | undefined>();
+  const [drafts, setDrafts] = useState<(ClientDraft | null)[]>([null, null, null]);
+
+  const readDrafts = () => {
+    try {
+      const raw = localStorage.getItem(DRAFTS_KEY);
+      if (!raw) return [null, null, null] as (ClientDraft | null)[];
+      const parsed: (ClientDraft | null)[] = JSON.parse(raw);
+      while (parsed.length < 3) parsed.push(null);
+      return parsed.slice(0, 3);
+    } catch {
+      return [null, null, null] as (ClientDraft | null)[];
+    }
+  };
+
+  // Refresh draft list whenever wizard closes (drafts may have changed)
+  const refreshDrafts = () => setDrafts(readDrafts());
+
+  const openNewClient = () => {
+    setInitialDraftSlot(undefined);
+    setIsWizardOpen(true);
+    refreshDrafts();
+  };
+
+  const openDraft = (slot: number) => {
+    setInitialDraftSlot(slot);
+    setIsWizardOpen(true);
+  };
+
+  const deleteDraftFromList = (slot: number) => {
+    const current = readDrafts();
+    current[slot - 1] = null;
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(current));
+    setDrafts([...current]);
+  };
 
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(15);
@@ -130,6 +166,11 @@ export function ClientsList() {
     }, searchQuery ? 350 : 0);
     return () => clearTimeout(timeoutId);
   }, [searchQuery, statusFilter, membershipFilter, page, perPage, fetchClients]);
+
+  useEffect(() => {
+    refreshDrafts();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleWizardSuccess = () => {
     fetchClients();
@@ -252,11 +293,72 @@ export function ClientsList() {
           </p>
         </div>
 
-        <Button size="lg" onClick={() => setIsWizardOpen(true)}>
+        <Button size="lg" onClick={openNewClient}>
           <UserPlus className="mr-2" size={20} weight="bold" />
           Nuevo Cliente
         </Button>
       </div>
+
+      {/* ─── Draft Panel ────────────────────────────────────────── */}
+      {drafts.some(Boolean) && (
+        <Card className="border-dashed border-amber-400 bg-amber-50/60 dark:bg-amber-950/20">
+          <CardHeader className="pb-3 pt-4">
+            <div className="flex items-center gap-2">
+              <FloppyDisk size={18} className="text-amber-600" weight="fill" />
+              <CardTitle className="text-sm text-amber-800 dark:text-amber-300">
+                Borradores pendientes
+              </CardTitle>
+              <Badge variant="secondary" className="ml-auto text-xs">
+                {drafts.filter(Boolean).length} / 3
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="pb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {drafts.map((draft, idx) => {
+                const slot = idx + 1;
+                if (!draft) return (
+                  <div key={slot} className="flex items-center justify-center rounded-lg border border-dashed border-amber-200 bg-white/40 dark:bg-white/5 h-16 text-xs text-muted-foreground">
+                    Slot {slot} vacío
+                  </div>
+                );
+                return (
+                  <div
+                    key={slot}
+                    className="flex flex-col gap-1 rounded-lg border border-amber-300 bg-white dark:bg-card p-3 shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm truncate">{draft.name || `Borrador ${slot}`}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {draft.phone && <span className="mr-2">{draft.phone}</span>}
+                          {new Date(draft.savedAt).toLocaleDateString('es-GT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => deleteDraftFromList(slot)}
+                        className="ml-2 flex-shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Eliminar borrador"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-1 w-full border-amber-400 text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/30"
+                      onClick={() => openDraft(slot)}
+                    >
+                      <ArrowCounterClockwise size={14} className="mr-1" />
+                      Retomar
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="space-y-4">
@@ -321,9 +423,10 @@ export function ClientsList() {
 
       <ClientCreateWizardModal
         open={isWizardOpen}
-        onClose={() => setIsWizardOpen(false)}
-        onSuccess={handleWizardSuccess}
+        onClose={() => { setIsWizardOpen(false); refreshDrafts(); }}
+        onSuccess={() => { handleWizardSuccess(); refreshDrafts(); }}
         plans={plans}
+        initialDraftSlot={initialDraftSlot}
       />
 
       <ClientEditModal

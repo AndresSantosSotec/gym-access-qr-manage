@@ -174,10 +174,15 @@ export const clientsService = {
       payload.first_name = parts[0];
       payload.last_name = parts.slice(1).join(' ');
     }
-    if (updates.dpi) payload.dni = updates.dpi;
-    if (updates.nit) payload.nit = updates.nit;
-    if (updates.companyName) payload.company_name = updates.companyName;
-    if (updates.fiscalAddress) payload.fiscal_address = updates.fiscalAddress;
+    // Map dpi → dni (send empty string as null so backend doesn't fail validation)
+    if ('dpi' in updates) payload.dni = updates.dpi || null;
+    if ('nit' in updates) payload.nit = updates.nit || null;
+    if ('companyName' in updates) payload.company_name = updates.companyName || null;
+    if ('fiscalAddress' in updates) payload.fiscal_address = updates.fiscalAddress || null;
+    // Normalize status to lowercase so backend 'in:active,inactive,suspended' accepts it
+    if (payload.status) payload.status = (payload.status as string).toLowerCase();
+    // Convert empty email to null
+    if ('email' in payload && payload.email === '') payload.email = null;
     if (updates.profilePhoto && updates.profilePhoto.startsWith('data:')) {
       // Prepare for file upload separately or handle base64 if backend supports it
       // The current ClientController.uploadPhoto expects a file 'photo'

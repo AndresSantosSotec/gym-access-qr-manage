@@ -21,22 +21,121 @@ import { registrationProductsService } from '@/services/registration-products.se
 import { RecurrenteCheckoutEmbed } from './RecurrenteCheckoutEmbed';
 import { PasoSeleccionProductos, type ProductoPagoItem } from '@/components/memberships/PasoSeleccionProductos';
 import type { MembershipPlan } from '@/types/models';
-import { Check, Camera, Upload, X, Fingerprint, CreditCard, MagnifyingGlass, ArrowSquareOut } from '@phosphor-icons/react';
+import { Check, Camera, Upload, X, Fingerprint, CreditCard, MagnifyingGlass, ArrowSquareOut, FloppyDisk, FolderOpen, Trash } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+
+// ─── Draft System ─────────────────────────────────────────────────────────────
+export const DRAFTS_KEY = 'gymflow_client_drafts';
+const MAX_DRAFTS = 3;
+
+export interface ClientDraft {
+  slot: number;           // 1..3
+  savedAt: string;        // ISO timestamp
+  label: string;          // display name (client name or "Borrador N")
+  name: string;
+  phone: string;
+  email: string;
+  dpi: string;
+  nit: string;
+  notes: string;
+}
+
+function loadDrafts(): (ClientDraft | null)[] {
+  try {
+    const raw = localStorage.getItem(DRAFTS_KEY);
+    if (!raw) return Array(MAX_DRAFTS).fill(null);
+    const parsed: (ClientDraft | null)[] = JSON.parse(raw);
+    // Ensure length is always MAX_DRAFTS
+    while (parsed.length < MAX_DRAFTS) parsed.push(null);
+    return parsed.slice(0, MAX_DRAFTS);
+  } catch {
+    return Array(MAX_DRAFTS).fill(null);
+  }
+}
+
+function saveDraftsToStorage(drafts: (ClientDraft | null)[]) {
+  localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
+}
 
 interface ClientCreateWizardModalProps {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
   plans: MembershipPlan[];
+  /** Open modal with this draft slot pre-loaded (1-3) */
+  initialDraftSlot?: number;
 }
 
 type Step = 1 | 2 | 3 | 4;
 
-export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: ClientCreateWizardModalProps) {
+export function ClientCreateWizardModal({ open, onClose, onSuccess, plans, initialDraftSlot }: ClientCreateWizardModalProps) {
   const [step, setStep] = useState<Step>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // ─── Draft state ───────────────────────────────────────────────────────────
+  const [drafts, setDrafts] = useState<(ClientDraft | null)[]>(() => loadDrafts());
+  const [activeDraftSlot, setActiveDraftSlot] = useState<number | null>(null);
+
+  // Re-sync drafts from storage every time the modal opens (other tabs may have updated them)
+  useEffect(() => {
+    if (open) {
+      const fresh = loadDrafts();
+      setDrafts(fresh);
+      // Auto-load the initialDraftSlot if provided
+      if (initialDraftSlot && initialDraftSlot >= 1 && initialDraftSlot <= MAX_DRAFTS) {
+        const draft = fresh[initialDraftSlot - 1];
+        if (draft) {
+          setName(draft.name);
+          setPhone(draft.phone);
+          setEmail(draft.email);
+          setDpi(draft.dpi);
+          setNit(draft.nit);
+          setNotes(draft.notes);
+          setActiveDraftSlot(initialDraftSlot);
+          toast.info(`Retomando borrador: ${draft.label}`);
+        }
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialDraftSlot]);
+
+  const saveDraft = (slot: number) => {
+    const draft: ClientDraft = {
+      slot,
+      savedAt: new Date().toISOString(),
+      label: name.trim() ? name.trim().split(' ')[0] : `Borrador ${slot}`,
+      name, phone, email, dpi, nit, notes,
+    };
+    const updated = [...drafts];
+    updated[slot - 1] = draft;
+    setDrafts(updated);
+    saveDraftsToStorage(updated);
+    setActiveDraftSlot(slot);
+    toast.success(`Borrador ${slot} guardado`);
+  };
+
+  const loadDraft = (slot: number) => {
+    const draft = drafts[slot - 1];
+    if (!draft) return;
+    setName(draft.name);
+    setPhone(draft.phone);
+    setEmail(draft.email);
+    setDpi(draft.dpi);
+    setNit(draft.nit);
+    setNotes(draft.notes);
+    setActiveDraftSlot(slot);
+    toast.info(`Borrador ${slot} cargado`);
+  };
+
+  const deleteDraft = (slot: number) => {
+    const updated = [...drafts];
+    updated[slot - 1] = null;
+    setDrafts(updated);
+    saveDraftsToStorage(updated);
+    if (activeDraftSlot === slot) setActiveDraftSlot(null);
+    toast.info(`Borrador ${slot} eliminado`);
+  };
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -161,9 +260,28 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
     setTransferDocument('');
     setPlanSearch('');
     setSelectedProductoIds([]);
+    setActiveDraftSlot(null);
   };
 
   const handleClose = () => {
+    // Auto-save to the first empty slot if the form has data and no active draft
+    if (name.trim() || phone.trim()) {
+      const currentDrafts = loadDrafts();
+      const emptySlot = currentDrafts.findIndex((d) => d === null);
+      const targetSlot = activeDraftSlot ?? (emptySlot >= 0 ? emptySlot + 1 : null);
+      if (targetSlot) {
+        const draft: ClientDraft = {
+          slot: targetSlot,
+          savedAt: new Date().toISOString(),
+          label: name.trim() ? name.trim().split(' ')[0] : `Borrador ${targetSlot}`,
+          name, phone, email, dpi, nit, notes,
+        };
+        const updated = [...currentDrafts];
+        updated[targetSlot - 1] = draft;
+        saveDraftsToStorage(updated);
+        toast.info(`Borrador guardado en Slot ${targetSlot}`);
+      }
+    }
     handleReset();
     onClose();
   };
@@ -474,6 +592,70 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans }: Cli
             {step === 1 && (
               <div className="space-y-4">
                 <h3 className="font-bold text-lg">Paso 1: Datos Básicos</h3>
+
+                {/* ── Draft Slots ─────────────────────────────────────────── */}
+                <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Borradores (hasta 3)</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {drafts.map((draft, idx) => {
+                      const slot = idx + 1;
+                      const isActive = activeDraftSlot === slot;
+                      return (
+                        <div
+                          key={slot}
+                          className={cn(
+                            'flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors',
+                            draft ? 'bg-background border-primary/40' : 'bg-muted border-dashed border-muted-foreground/30',
+                            isActive && 'ring-2 ring-primary ring-offset-1'
+                          )}
+                        >
+                          <span className={cn('font-semibold', draft ? 'text-foreground' : 'text-muted-foreground')}>
+                            {draft ? draft.label : `Slot ${slot}`}
+                          </span>
+                          {draft && (
+                            <span className="text-muted-foreground ml-1" title={new Date(draft.savedAt).toLocaleString()}>
+                              {new Date(draft.savedAt).toLocaleDateString('es-GT', { day:'2-digit', month:'short' })}
+                            </span>
+                          )}
+                          {/* Load */}
+                          {draft && (
+                            <button
+                              type="button"
+                              className="ml-1 text-primary hover:text-primary/80"
+                              title="Cargar borrador"
+                              onClick={() => loadDraft(slot)}
+                            >
+                              <FolderOpen size={13} weight="fill" />
+                            </button>
+                          )}
+                          {/* Save */}
+                          <button
+                            type="button"
+                            className="text-green-600 hover:text-green-700"
+                            title="Guardar en este slot"
+                            onClick={() => saveDraft(slot)}
+                          >
+                            <FloppyDisk size={13} weight="fill" />
+                          </button>
+                          {/* Delete */}
+                          {draft && (
+                            <button
+                              type="button"
+                              className="text-destructive hover:text-destructive/80"
+                              title="Eliminar borrador"
+                              onClick={() => deleteDraft(slot)}
+                            >
+                              <Trash size={13} weight="fill" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    💾 Guarda el formulario actual en un slot. 📂 Carga uno guardado.
+                  </p>
+                </div>
 
                 <div className="grid gap-4">
                   <div>
