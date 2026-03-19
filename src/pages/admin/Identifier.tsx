@@ -1,195 +1,320 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Fingerprint, User, CheckCircle, XCircle, Spinner } from '@phosphor-icons/react';
-import { accessService } from '@/services/access.service';
+/**
+ * Identifier — Terminal de Identificación por Huella Digital (Kiosco)
+ *
+ * Página pública de pantalla completa, diseñada para montarse en una TV/monitor
+ * de entrada al gimnasio. No requiere autenticación.
+ *
+ * Flujo:
+ *   1. La página carga → el hook useFingerprint detecta el lector DigitalPersona.
+ *   2. El usuario coloca el dedo sin tocar nada.
+ *   3. onSamplesAcquired dispara → se envía el PNG base64 a POST /access/identify-fingerprint.
+ *   4. El backend (Laravel → Python server) hace correlación 1:N y devuelve el cliente.
+ *   5. Se muestra tarjeta de resultado 4 s → vuelve al estado de espera automáticamente.
+ *
+ * Sobre la validación WebSDK:
+ *   - El SDK captura imágenes en formato PngImage (base64).
+ *   - El servidor Python aplica correlación cruzada normalizada (numpy) sobre los bytes
+ *     crudos del PNG. Umbral por defecto 0.50 — misma persona suele dar 0.55–0.85.
+ *   - NO se requiere ningún algoritmo propietario en el cliente; toda la comparación
+ *     ocurre server-side, por lo que esta vista solo necesita el WebSDK para captura.
+ */
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { Fingerprint, CheckCircle, XCircle, Warning, User, ArrowClockwise } from '@phosphor-icons/react';
+import { useFingerprint } from '@/hooks/useFingerprint';
 import { clientsService } from '@/services/clients.service';
-import type { Client } from '@/types/models';
-import { toast } from 'sonner';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
+
+/* ── Types ────────────────────────────────────────────────────────────── */
+
+interface IdentifyResult {
+    match: boolean;
+    allowed?: boolean;
+    similarity_pct?: number;
+    client?: {
+        id: number;
+        first_name?: string;
+        last_name?: string;
+        full_name?: string;
+        photo_public_path?: string;
+        memberships?: Array<{ status: string; end_date: string }>;
+    };
+    message?: string;
+    error?: string;
+}
+
+type KioskState = 'idle' | 'processing' | 'allowed' | 'denied' | 'no_match' | 'sdk_error';
+
+const RESULT_DISPLAY_MS = 4500;
+
+/* ── Helper ───────────────────────────────────────────────────────────── */
+
+function buildPhotoUrl(path?: string | null): string | null {
+    if (!path) return null;
+    if (path.startsWith('http')) return path;
+    return window.location.origin + (path.startsWith('/') ? path : '/' + path);
+}
+
+/* ── Component ────────────────────────────────────────────────────────── */
 
 export function Identifier() {
-    const [isScanning, setIsScanning] = useState(false);
-    const [lastScanResult, setLastScanResult] = useState<{
-        allowed: boolean;
-        client: Client | null;
-        message: string;
-    } | null>(null);
+    const [kioskState, setKioskState] = useState<KioskState>('idle');
+    const [result, setResult]         = useState<IdentifyResult | null>(null);
+    const [countdown, setCountdown]   = useState(0);
+    const cooldownRef                 = useRef(false);
+    const timerRef                    = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    // For simulation purposes
-    const [clients, setClients] = useState<Partial<Client>[]>([]);
-    const [selectedSimulatedClient, setSelectedSimulatedClient] = useState<string>('');
-
-    useEffect(() => {
-        // Load clients for simulation dropdown (public endpoint)
-        const loadClients = async () => {
-            try {
-                const data = await clientsService.getFingerprintClients();
-                setClients(data);
-            } catch (error) {
-                console.error('Error loading clients', error);
+    /* Auto-reset after a result is shown */
+    const startCountdown = useCallback(() => {
+        let secs = Math.ceil(RESULT_DISPLAY_MS / 1000);
+        setCountdown(secs);
+        timerRef.current = setInterval(() => {
+            secs -= 1;
+            setCountdown(secs);
+            if (secs <= 0) {
+                clearInterval(timerRef.current!);
+                timerRef.current = null;
+                cooldownRef.current = false;
+                setKioskState('idle');
+                setResult(null);
+                setCountdown(0);
             }
-        };
-        loadClients();
+        }, 1000);
     }, []);
 
-    const handleScan = async () => {
-        setIsScanning(true);
-        setLastScanResult(null);
+    useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
-        // Simulate delay for scanning
-        setTimeout(async () => {
-            try {
-                // In a real scenario, this would come from the device SDK
-                // For now, we use the selected client's fingerprint ID or a dummy one
-                const fingerprintId = selectedSimulatedClient
-                    ? clients.find(c => c.id === selectedSimulatedClient)?.fingerprintId
-                    : 'UNKNOWN-FINGERPRINT';
+    /* Called every time the WebSDK reader fires onSamplesAcquired */
+    const handleSample = useCallback(async (sample: { imageBase64: string }) => {
+        if (cooldownRef.current) return;
+        cooldownRef.current = true;
 
-                if (!fingerprintId) {
-                    toast.error("Error: Cliente seleccionado sin ID de huella");
-                    setIsScanning(false);
-                    return;
-                }
+        setKioskState('processing');
+        setResult(null);
 
-                const result = await accessService.verifyAccessByFingerprint(fingerprintId);
-                setLastScanResult(result);
+        try {
+            const data = await clientsService.identifyFingerprint(sample.imageBase64) as IdentifyResult;
+            setResult(data);
 
-                if (result.allowed) {
-                    toast.success(result.message);
-                } else {
-                    toast.error(result.message);
-                }
-            } catch (error) {
-                console.error(error);
-                toast.error('Error al procesar la huella');
-            } finally {
-                setIsScanning(false);
+            if (!data.match) {
+                setKioskState('no_match');
+            } else if (data.allowed) {
+                setKioskState('allowed');
+            } else {
+                setKioskState('denied');
             }
-        }, 2000);
+        } catch {
+            setKioskState('no_match');
+        } finally {
+            startCountdown();
+        }
+    }, [startCountdown]);
+
+    const {
+        sdkReady,
+        readers,
+        selectedReader,
+        setSelectedReader,
+        status: sdkStatus,
+        isCapturing,
+        startCapture,
+        stopCapture,
+    } = useFingerprint(handleSample);
+
+    /* Auto-start capture when reader is available */
+    useEffect(() => {
+        if (sdkReady && selectedReader && !isCapturing) {
+            startCapture();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sdkReady, selectedReader]);
+
+    /* Report SDK error state so the kiosk shows something useful */
+    useEffect(() => {
+        if (!sdkReady && sdkStatus && sdkStatus !== 'Inicializando SDK...') {
+            setKioskState('sdk_error');
+        }
+    }, [sdkReady, sdkStatus]);
+
+    /* ── Theme per state ── */
+    const bg: Record<KioskState, string> = {
+        idle:      'from-slate-900 to-slate-800',
+        processing:'from-blue-950 to-blue-900',
+        allowed:   'from-green-950 to-green-900',
+        denied:    'from-orange-950 to-orange-900',
+        no_match:  'from-red-950 to-red-900',
+        sdk_error: 'from-yellow-950 to-yellow-900',
     };
 
-    const clearResult = () => {
-        setLastScanResult(null);
+    const clientPhoto = buildPhotoUrl(result?.client?.photo_public_path);
+    const clientName  = result?.client?.full_name
+        ?? (result?.client ? `${result.client.first_name ?? ''} ${result.client.last_name ?? ''}`.trim() : '');
+
+    const manualReset = () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+        timerRef.current = null;
+        cooldownRef.current = false;
+        setKioskState('idle');
+        setResult(null);
+        setCountdown(0);
     };
 
     return (
-        <div className="p-6 lg:p-8 space-y-6 max-w-4xl mx-auto">
-            <div className="text-center space-y-2">
-                <h1 className="text-3xl font-bold tracking-tight">Terminal de Identificación</h1>
-                <p className="text-muted-foreground">
-                    Coloca el dedo en el lector para identificar y verificar acceso
-                </p>
+        <div className={`min-h-screen bg-gradient-to-br ${bg[kioskState]} transition-colors duration-700 flex flex-col items-center justify-center p-6 select-none`}>
+
+            {/* ── Header ── */}
+            <div className="mb-8 text-center">
+                <p className="text-white/50 text-sm uppercase tracking-widest font-medium">GymFlow · Control de Acceso</p>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
-                {/* Scanner Panel */}
-                <Card className="md:col-span-1 h-full flex flex-col items-center justify-center p-8 bg-muted/20">
-                    <div className="relative mb-8">
-                        <div className={`w-32 h-32 rounded-full flex items-center justify-center border-4 ${isScanning ? 'border-primary animate-pulse' : 'border-muted-foreground/20'}`}>
-                            {isScanning ? (
-                                <Spinner size={64} className="animate-spin text-primary" />
-                            ) : (
-                                <Fingerprint size={64} className="text-muted-foreground" weight="duotone" />
-                            )}
+            {/* ── SDK not ready ── */}
+            {kioskState === 'sdk_error' && (
+                <div className="max-w-lg w-full rounded-2xl border border-yellow-500/40 bg-yellow-900/30 p-6 text-center space-y-3">
+                    <Warning size={48} weight="fill" className="mx-auto text-yellow-400" />
+                    <p className="text-yellow-200 font-semibold text-lg">Lector no disponible</p>
+                    <pre className="text-yellow-300/70 text-xs whitespace-pre-wrap font-mono text-left bg-black/30 rounded-lg p-3">{sdkStatus}</pre>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="mt-2 flex items-center gap-2 mx-auto text-sm text-yellow-300 hover:text-yellow-100 transition-colors"
+                    >
+                        <ArrowClockwise size={16} /> Recargar página
+                    </button>
+                </div>
+            )}
+
+            {/* ── Reader selector (only shown if >1 reader) ── */}
+            {sdkReady && readers.length > 1 && kioskState === 'idle' && (
+                <div className="mb-6 flex items-center gap-3 text-sm text-white/60">
+                    <span>Lector:</span>
+                    <select
+                        className="rounded-lg bg-white/10 border border-white/20 text-white px-3 py-1.5 text-sm"
+                        value={selectedReader}
+                        onChange={(e) => {
+                            setSelectedReader(e.target.value);
+                            if (isCapturing) stopCapture();
+                        }}
+                    >
+                        {readers.map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                </div>
+            )}
+
+            {/* ── Main panel ── */}
+            {kioskState !== 'sdk_error' && (
+                <div className="max-w-sm w-full flex flex-col items-center gap-6">
+
+                    {/* Fingerprint icon / spinner */}
+                    {(kioskState === 'idle' || kioskState === 'processing') && (
+                        <div className={`w-44 h-44 rounded-full border-4 flex items-center justify-center
+                            ${kioskState === 'processing'
+                                ? 'border-blue-400 shadow-[0_0_40px_rgba(96,165,250,0.4)] animate-pulse'
+                                : 'border-white/20 shadow-[0_0_40px_rgba(255,255,255,0.05)]'}`}>
+                            <Fingerprint
+                                size={96}
+                                weight="light"
+                                className={`${kioskState === 'processing' ? 'text-blue-300 animate-pulse' : 'text-white/40'} transition-colors duration-500`}
+                            />
                         </div>
-                    </div>
+                    )}
 
-                    <div className="w-full max-w-xs space-y-4">
-                        {!isScanning && (
-                            <>
-                                {/* Simulation Control */}
-                                <div className="p-4 border rounded-lg bg-background shadow-sm space-y-3">
-                                    <Label className="text-xs font-mono text-muted-foreground uppercase">Modo Simulación</Label>
-                                    <Select value={selectedSimulatedClient} onValueChange={setSelectedSimulatedClient}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Seleccionar huella..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="unknown">Huella No Registrada</SelectItem>
-                                            {clients.map(client => (
-                                                <SelectItem key={String(client.id ?? '')} value={String(client.id ?? '')}>
-                                                    {client.name} (ID: {client.fingerprintId?.substring(0, 8) || '?'})
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                    {/* Result: client card */}
+                    {(kioskState === 'allowed' || kioskState === 'denied') && result?.client && (
+                        <div className="flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-400">
+                            {/* Avatar */}
+                            <div className="relative">
+                                {clientPhoto ? (
+                                    <img
+                                        src={clientPhoto}
+                                        alt={clientName}
+                                        className={`w-44 h-44 rounded-full object-cover border-4 shadow-xl
+                                            ${kioskState === 'allowed' ? 'border-green-400 shadow-green-500/40' : 'border-orange-400 shadow-orange-500/40'}`}
+                                    />
+                                ) : (
+                                    <div className={`w-44 h-44 rounded-full flex items-center justify-center border-4 bg-white/10
+                                        ${kioskState === 'allowed' ? 'border-green-400' : 'border-orange-400'}`}>
+                                        <User size={80} className="text-white/50" weight="fill" />
+                                    </div>
+                                )}
+                                <div className={`absolute -bottom-2 -right-2 w-12 h-12 rounded-full flex items-center justify-center border-4 border-background
+                                    ${kioskState === 'allowed' ? 'bg-green-500' : 'bg-orange-500'}`}>
+                                    {kioskState === 'allowed'
+                                        ? <CheckCircle size={28} weight="fill" className="text-white" />
+                                        : <XCircle     size={28} weight="fill" className="text-white" />}
                                 </div>
+                            </div>
 
-                                <Button
-                                    size="lg"
-                                    className="w-full h-12 text-lg"
-                                    onClick={handleScan}
-                                    disabled={!selectedSimulatedClient}
-                                >
-                                    {isScanning ? 'Escaneando...' : 'Escanear Huella'}
-                                </Button>
+                            <p className="text-3xl font-bold text-white text-center">{clientName}</p>
+                        </div>
+                    )}
+
+                    {/* No match icon */}
+                    {kioskState === 'no_match' && (
+                        <div className="w-44 h-44 rounded-full border-4 border-red-500/60 flex items-center justify-center">
+                            <XCircle size={96} weight="light" className="text-red-400" />
+                        </div>
+                    )}
+
+                    {/* Status message */}
+                    <div className="text-center space-y-1">
+                        {kioskState === 'idle' && (
+                            <>
+                                <p className="text-white text-2xl font-light">Coloca el dedo en el lector</p>
+                                <p className="text-white/40 text-sm">
+                                    {isCapturing ? 'Escaneando...' : sdkReady ? 'Iniciando lector...' : 'Conectando SDK...'}
+                                </p>
                             </>
                         )}
-
-                        {isScanning && (
-                            <p className="text-center text-sm text-muted-foreground animate-pulse">
-                                Leyendo datos biométricos...
-                            </p>
+                        {kioskState === 'processing' && (
+                            <p className="text-blue-200 text-2xl font-light animate-pulse">Identificando…</p>
+                        )}
+                        {(kioskState === 'allowed' || kioskState === 'denied') && (
+                            <>
+                                <p className={`text-2xl font-semibold ${kioskState === 'allowed' ? 'text-green-300' : 'text-orange-300'}`}>
+                                    {result?.message ?? (kioskState === 'allowed' ? '¡Bienvenido/a!' : 'Acceso denegado')}
+                                </p>
+                                {result?.similarity_pct !== undefined && (
+                                    <p className="text-white/30 text-sm">{result.similarity_pct}% similitud</p>
+                                )}
+                            </>
+                        )}
+                        {kioskState === 'no_match' && (
+                            <p className="text-red-300 text-2xl font-light">Huella no reconocida</p>
                         )}
                     </div>
-                </Card>
 
-                {/* Result Panel */}
-                <Card className="md:col-span-1 min-h-[400px]">
-                    <CardHeader>
-                        <CardTitle>Información del Cliente</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex flex-col items-center justify-center h-full pb-10">
-                        {lastScanResult ? (
-                            <div className="text-center space-y-6 w-full animate-in fade-in zoom-in duration-300">
-                                <div className="relative mx-auto">
-                                    {lastScanResult.client?.profilePhoto ? (
-                                        <img
-                                            src={lastScanResult.client.profilePhoto}
-                                            alt={lastScanResult.client.name}
-                                            className={`w-40 h-40 rounded-full object-cover border-4 ${lastScanResult.allowed ? 'border-green-500' : 'border-red-500'}`}
-                                        />
-                                    ) : (
-                                        <div className={`w-40 h-40 rounded-full flex items-center justify-center border-4 bg-muted ${lastScanResult.allowed ? 'border-green-500 text-green-600' : 'border-red-500 text-red-600'}`}>
-                                            <User size={80} weight="fill" />
-                                        </div>
-                                    )}
-                                    <div className={`absolute bottom-0 right-0 p-2 rounded-full border-4 border-background ${lastScanResult.allowed ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
-                                        {lastScanResult.allowed ? <CheckCircle size={32} weight="fill" /> : <XCircle size={32} weight="fill" />}
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <h2 className="text-2xl font-bold">
-                                        {lastScanResult.client ? lastScanResult.client.name : 'Desconocido'}
-                                    </h2>
-                                    <p className={`text-lg font-medium ${lastScanResult.allowed ? 'text-green-600' : 'text-red-600'}`}>
-                                        {lastScanResult.message}
-                                    </p>
-                                    {lastScanResult.client && (
-                                        <div className="text-sm text-muted-foreground space-y-1">
-                                            <p>ID: {lastScanResult.client.id}</p>
-                                            <p>Estado: {lastScanResult.client.status}</p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <Button variant="outline" onClick={clearResult}>
-                                    Nueva Lectura
-                                </Button>
+                    {/* Countdown bar */}
+                    {countdown > 0 && (
+                        <div className="w-full space-y-1">
+                            <div className="w-full bg-white/10 rounded-full h-1.5">
+                                <div
+                                    className={`h-1.5 rounded-full transition-all duration-1000
+                                        ${kioskState === 'allowed' ? 'bg-green-400' : kioskState === 'denied' ? 'bg-orange-400' : 'bg-red-400'}`}
+                                    style={{ width: `${(countdown / Math.ceil(RESULT_DISPLAY_MS / 1000)) * 100}%` }}
+                                />
                             </div>
-                        ) : (
-                            <div className="text-center text-muted-foreground space-y-4">
-                                <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center mx-auto opacity-50">
-                                    <User size={48} />
-                                </div>
-                                <p>Esperando lectura de huella...</p>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
+                            <button
+                                onClick={manualReset}
+                                className="mx-auto block text-xs text-white/30 hover:text-white/60 transition-colors"
+                            >
+                                Nueva lectura ({countdown}s)
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Manual capture toggle (shown idle, not processing) */}
+                    {sdkReady && kioskState === 'idle' && !isCapturing && (
+                        <button
+                            onClick={() => startCapture()}
+                            disabled={!selectedReader}
+                            className="mt-2 px-6 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white text-sm border border-white/20 transition-all"
+                        >
+                            Activar lector
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {/* ── Footer ── */}
+            <div className="mt-10 text-center text-white/20 text-xs">
+                DigitalPersona U.are.U · WebSDK · Identificación 1:N
             </div>
         </div>
     );

@@ -263,5 +263,64 @@ export const clientsService = {
   getFingerprintStatus: async (clientId: string): Promise<any> => {
     const response = await api.get(`/clients/${clientId}/fingerprint/status`);
     return response.data;
+  },
+
+  /**
+   * 1:N fingerprint identification using a two-step local+remote approach:
+   *
+   *  Step 1 — Call the Python fingerprint server DIRECTLY on localhost:8089.
+   *            The server runs on the same kiosk machine as the browser and the
+   *            physical reader, so localhost is always reachable.
+   *            Python queries the production MySQL for stored templates and
+   *            runs ORB matching returning {match, client_id, similarity_pct}.
+   *
+   *  Step 2 — If a match is found, call Laravel (/access/log-fingerprint-access)
+   *            to log the access event and retrieve full client + membership data.
+   *
+   * This bypasses the old Laravel → localhost:8089 proxy path that failed on
+   * the remote server (cURL error 7).
+   */
+  identifyFingerprint: async (fingerprintTemplate: string, threshold?: number): Promise<{
+    match: boolean;
+    allowed?: boolean;
+    similarity_pct?: number;
+    client?: any;
+    message?: string;
+    error?: string;
+  }> => {
+    // ── Step 1: local Python server ──────────────────────────────────────────
+    let pythonResult: any;
+    try {
+      const pythonResp = await fetch('http://localhost:8089/api/fingerprint/identify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fingerprint_template: fingerprintTemplate,
+          ...(threshold !== undefined ? { threshold } : {}),
+        }),
+      });
+      pythonResult = await pythonResp.json();
+    } catch {
+      return {
+        match: false,
+        error: 'Servidor de huellas no disponible. Verifique que el servicio GymflowFP esté activo en localhost:8089.',
+      };
+    }
+
+    if (!pythonResult?.match) {
+      return {
+        match: false,
+        similarity_pct: pythonResult?.similarity_pct,
+        message: pythonResult?.message ?? 'No se encontró coincidencia.',
+      };
+    }
+
+    // ── Step 2: Laravel — log access + get full client info ──────────────────
+    const response = await api.post('/access/log-fingerprint-access', {
+      client_id:      pythonResult.client_id,
+      similarity_pct: pythonResult.similarity_pct,
+      fingerprint_id: pythonResult.fingerprint_id,
+    });
+    return response.data;
   }
 };

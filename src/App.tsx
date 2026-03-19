@@ -82,6 +82,9 @@ function App() {
         <Route path="/p/pago-demo" element={<PublicStripeDemoCheckout />} />
         <Route path="/qr/:clientId" element={<QrPass />} />
 
+        {/* Kiosk: fingerprint access terminal — no authentication required */}
+        <Route path="/identificador" element={<Identifier />} />
+
         {/* Admin protected routes */}
         <Route path="/admin" element={
           <ProtectedRoute>

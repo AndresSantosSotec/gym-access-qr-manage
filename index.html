@@ -10,6 +10,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="/src/main.css" rel="stylesheet" />
+    <!-- DigitalPersona U.are.U WebSDK — must load BEFORE any other UMD script (recurrente-checkout) to prevent define.amd conflict -->
+    <script src="/scripts/es6-shim.js" onerror="console.warn('[DigitalPersona] es6-shim.js no encontrado en public/scripts/')"></script>
+    <script src="/scripts/websdk.client.bundle.min.js" onerror="console.warn('[DigitalPersona] websdk.client.bundle.min.js no encontrado en public/scripts/')"></script>
+    <script src="/scripts/fingerprint.sdk.min.js" onerror="console.warn('[DigitalPersona] fingerprint.sdk.min.js no encontrado en public/scripts/')"></script>
     <script src="/recurrente-checkout.js"></script>
 </head>
 

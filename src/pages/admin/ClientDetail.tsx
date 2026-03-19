@@ -71,6 +71,18 @@ export function ClientDetail() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isFingerprintDialogOpen, setIsFingerprintDialogOpen] = useState(false);
   const [isRemoveFingerprintOpen, setIsRemoveFingerprintOpen] = useState(false);
+  const [isVerifyingFp, setIsVerifyingFp] = useState(false);
+  const [fpVerifyResult, setFpVerifyResult] = useState<{
+    match: boolean;
+    similarity_pct: number;
+    live_image: string | null;
+    message: string;
+  } | null>(null);
+  const [storedFpData, setStoredFpData] = useState<{
+    image_base64: string | null;
+    quality: number | null;
+    device_id: string | null;
+  } | null>(null);
   const [isEconomicDialogOpen, setIsEconomicDialogOpen] = useState(false);
   const [isWebcamOpen, setIsWebcamOpen] = useState(false);
   const [editingEconomicItem, setEditingEconomicItem] = useState<EconomicProfileItem | null>(null);
@@ -125,6 +137,28 @@ export function ClientDetail() {
       loadRelatedData();
     }
   }, [client]);
+
+  // Cargar imagen de huella almacenada cuando el cliente tiene fingerprint registrado
+  useEffect(() => {
+    if (!client?.fingerprintId) {
+      setStoredFpData(null);
+      return;
+    }
+    api
+      .get(`/fingerprint/${client.fingerprintId}`)
+      .then((res) => {
+        if (res.data?.success) {
+          setStoredFpData({
+            image_base64: res.data.image_base64 ?? null,
+            quality: res.data.quality ?? null,
+            device_id: res.data.device_id ?? null,
+          });
+        }
+      })
+      .catch(() => {
+        // Server offline — no problem, just won't show stored image
+      });
+  }, [client?.fingerprintId]);
 
   // Cargar planes de membresía
   useEffect(() => {
@@ -196,14 +230,12 @@ export function ClientDetail() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 1024 * 1024) {
-      toast.error('La imagen debe ser menor a 1MB');
-      return;
-    }
-
     if (!file.type.startsWith('image/')) {
       toast.error('Solo se permiten archivos de imagen');
       return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.warning('La imagen supera los 2MB, puede afectar el rendimiento');
     }
 
     const reader = new FileReader();
@@ -212,38 +244,47 @@ export function ClientDetail() {
       setPhotoPreview(base64);
       if (client) {
         try {
-          await clientsService.update(client.id, { profilePhoto: base64 });
+          await clientsService.uploadPhoto(client.id, base64);
           setClient({ ...client, profilePhoto: base64 });
           toast.success('Foto actualizada');
         } catch (error) {
           console.error(error);
-          toast.error('Error al actualizar la foto');
+          toast.error('Error al subir la foto');
         }
       }
     };
     reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const handleRemovePhoto = async () => {
     if (!client) return;
     try {
-      await clientsService.update(client.id, { profilePhoto: undefined });
+      await api.delete(`/clients/${client.id}/photo`);
       setClient({ ...client, profilePhoto: undefined });
       setPhotoPreview(null);
       toast.success('Foto eliminada');
-    } catch (error) {
-      console.error(error);
-      toast.error('Error al eliminar la foto');
+    } catch (error: any) {
+      // Si el backend no tiene la ruta DELETE /photo, igualmente limpiamos la UI
+      if (error?.response?.status === 404) {
+        setClient({ ...client, profilePhoto: undefined });
+        setPhotoPreview(null);
+        toast.success('Foto eliminada');
+      } else {
+        console.error(error);
+        toast.error('Error al eliminar la foto');
+      }
     }
   };
 
   const handleWebcamCapture = async (base64Image: string) => {
     if (!client) return;
     setPhotoPreview(base64Image);
+    setIsWebcamOpen(false);
     try {
-      await clientsService.update(client.id, { profilePhoto: base64Image });
+      await clientsService.uploadPhoto(client.id, base64Image);
       setClient({ ...client, profilePhoto: base64Image });
-      toast.success('Foto capturada y actualizada');
+      toast.success('Foto capturada y guardada');
     } catch (error) {
       console.error(error);
       toast.error('Error al guardar la foto capturada');
@@ -259,6 +300,8 @@ export function ClientDetail() {
       const fingerprintId = result.fingerprint_id || `FP-${client.id}-${Date.now()}`;
       const registeredAt = result.registered_at || new Date().toISOString();
 
+      setStoredFpData(null); // clear old image; useEffect will re-fetch
+      setFpVerifyResult(null);
       setClient({ ...client, fingerprintId, fingerprintRegisteredAt: registeredAt });
       setIsFingerprintDialogOpen(false);
       toast.success('Huella digital registrada exitosamente');
@@ -282,11 +325,35 @@ export function ClientDetail() {
       }
 
       setClient({ ...client, fingerprintId: undefined, fingerprintRegisteredAt: undefined });
+      setStoredFpData(null);
+      setFpVerifyResult(null);
       setIsRemoveFingerprintOpen(false);
       toast.success('Huella eliminada');
     } catch (error) {
       console.error(error);
       toast.error('Error al eliminar la huella');
+    }
+  };
+
+  const handleVerifyFingerprint = async () => {
+    if (!client?.fingerprintId) return;
+    setIsVerifyingFp(true);
+    setFpVerifyResult(null);
+    try {
+      const res = await api.post('/fingerprint/verify-live', {
+        fingerprint_id: client.fingerprintId,
+      });
+      setFpVerifyResult(res.data);
+      if (res.data.match) {
+        toast.success(`✅ Huella verificada — Similitud: ${res.data.similarity_pct}%`);
+      } else {
+        toast.error(`❌ No coincide la huella — Similitud: ${res.data.similarity_pct}%`);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al verificar la huella. ¿Está el servidor del lector activo?');
+    } finally {
+      setIsVerifyingFp(false);
     }
   };
 
@@ -719,17 +786,26 @@ export function ClientDetail() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Huella Digital (Demo)</CardTitle>
-              <CardDescription>Registro biométrico para control de acceso</CardDescription>
+              <CardTitle>Huella Digital</CardTitle>
+              <CardDescription>Registro biométrico para control de acceso — DigitalPersona U.are.U® 4500</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                {/* Left: fingerprint image or icon + info */}
                 <div className="flex items-center gap-4">
-                  <Fingerprint
-                    size={48}
-                    weight="duotone"
-                    className={client.fingerprintId ? 'text-green-600' : 'text-muted-foreground'}
-                  />
+                  {storedFpData?.image_base64 ? (
+                    <img
+                      src={`data:image/png;base64,${storedFpData.image_base64}`}
+                      alt="Huella registrada"
+                      className="w-16 h-16 rounded-lg border-2 border-green-500 object-cover bg-gray-100"
+                    />
+                  ) : (
+                    <Fingerprint
+                      size={48}
+                      weight="duotone"
+                      className={client.fingerprintId ? 'text-green-600' : 'text-muted-foreground'}
+                    />
+                  )}
                   <div>
                     <p className="font-semibold">
                       {client.fingerprintId ? 'Huella Registrada' : 'Sin Huella'}
@@ -739,20 +815,50 @@ export function ClientDetail() {
                         Registrada: {formatDateTime(client.fingerprintRegisteredAt)}
                       </p>
                     )}
+                    {storedFpData?.quality && (
+                      <p className="text-xs text-muted-foreground">
+                        Calidad: {storedFpData.quality}% &nbsp;·&nbsp;
+                        <span className={
+                          storedFpData.device_id === 'simulator' || storedFpData.device_id === 'default'
+                            ? 'text-yellow-600'
+                            : 'text-green-600'
+                        }>
+                          {storedFpData.device_id === 'default' ? 'simulador' : storedFpData.device_id}
+                        </span>
+                      </p>
+                    )}
                     {client.fingerprintId && (
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         ID: {client.fingerprintId}
                       </p>
                     )}
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap justify-end">
                   {client.fingerprintId ? (
                     <>
                       <Badge variant="default" className="bg-green-600">
                         <CheckCircle className="mr-1" size={14} weight="fill" />
                         Registrada
                       </Badge>
+                      <Button
+                        onClick={handleVerifyFingerprint}
+                        disabled={isVerifyingFp}
+                        variant="outline"
+                        size="sm"
+                      >
+                        {isVerifyingFp ? (
+                          <>
+                            <span className="animate-spin mr-2">⌛</span>
+                            Leyendo...
+                          </>
+                        ) : (
+                          <>
+                            <Fingerprint className="mr-1" size={14} weight="bold" />
+                            Probar Huella
+                          </>
+                        )}
+                      </Button>
                       <Button onClick={() => setIsRemoveFingerprintOpen(true)} variant="destructive" size="sm">
                         Eliminar
                       </Button>
@@ -770,6 +876,65 @@ export function ClientDetail() {
                   )}
                 </div>
               </div>
+
+              {/* Simulator-mode warning: registered without real image */}
+              {client.fingerprintId && storedFpData && !storedFpData.image_base64 && (
+                <div className="flex items-center gap-3 p-3 rounded-lg border border-yellow-400 bg-yellow-50 dark:bg-yellow-950/20 text-sm">
+                  <span className="text-yellow-600 text-lg">⚠️</span>
+                  <div className="flex-1">
+                    <p className="font-medium text-yellow-800 dark:text-yellow-200">Registrada en modo simulador</p>
+                    <p className="text-yellow-700 dark:text-yellow-300 text-xs mt-0.5">
+                      El lector real ya está conectado. Elimine esta huella y vuelva a registrarla para obtener la imagen biométrica real.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-yellow-500 text-yellow-700 hover:bg-yellow-100"
+                    onClick={() => setIsFingerprintDialogOpen(true)}
+                  >
+                    Re-registrar
+                  </Button>
+                </div>
+              )}
+
+              {/* Verify result panel */}
+              {fpVerifyResult && (
+                <div className={`p-4 rounded-lg border-2 ${
+                  fpVerifyResult.match
+                    ? 'border-green-500 bg-green-50 dark:bg-green-950/20'
+                    : 'border-red-400 bg-red-50 dark:bg-red-950/20'
+                }`}>
+                  <div className="flex items-start gap-4">
+                    {fpVerifyResult.live_image && (
+                      <img
+                        src={`data:image/png;base64,${fpVerifyResult.live_image}`}
+                        alt="Huella capturada"
+                        className="w-24 h-24 rounded-md border object-cover bg-gray-100"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <p className={`text-lg font-bold ${
+                        fpVerifyResult.match ? 'text-green-700' : 'text-red-600'
+                      }`}>
+                        {fpVerifyResult.match ? '✅ Huella Verificada' : '❌ No Coincide'}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Similitud: <span className="font-semibold">{fpVerifyResult.similarity_pct}%</span>
+                      </p>
+                      {fpVerifyResult.message && (
+                        <p className="text-xs text-muted-foreground mt-1">{fpVerifyResult.message}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setFpVerifyResult(null)}
+                      className="text-muted-foreground hover:text-foreground text-xs"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

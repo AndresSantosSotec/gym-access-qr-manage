@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { clientsService } from '@/services/clients.service';
 import type { Client } from '@/types/models';
 import { toast } from 'sonner';
+import { Camera, Upload, X, UserCircle } from '@phosphor-icons/react';
+import { WebcamCaptureModal } from '@/components/WebcamCaptureModal';
 
 interface ClientEditModalProps {
     client: Client | null;
@@ -32,6 +34,8 @@ export function ClientEditModal({ client, open, onClose, onSuccess }: ClientEdit
         status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [profilePhoto, setProfilePhoto] = useState<string>('');
+    const [isWebcamOpen, setIsWebcamOpen] = useState(false);
 
     useEffect(() => {
         if (client && open) {
@@ -43,8 +47,25 @@ export function ClientEditModal({ client, open, onClose, onSuccess }: ClientEdit
                 notes: client.notes || '',
                 status: client.status || 'ACTIVE',
             });
+            setProfilePhoto(client.profilePhoto || '');
         }
     }, [client, open]);
+
+    const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            toast.error('Solo se permiten imágenes');
+            return;
+        }
+        if (file.size > 2 * 1024 * 1024) {
+            toast.warning('La imagen supera los 2MB, puede afectar el rendimiento');
+        }
+        const reader = new FileReader();
+        reader.onloadend = () => setProfilePhoto(reader.result as string);
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -58,11 +79,21 @@ export function ClientEditModal({ client, open, onClose, onSuccess }: ClientEdit
         setIsSubmitting(true);
         try {
             const updated = await clientsService.update(client.id, editForm);
-            if (updated) {
-                toast.success('Cliente actualizado');
-                onSuccess(updated);
-                onClose();
+            if (!updated) throw new Error('No se recibió respuesta del servidor');
+
+            // Upload new photo if changed
+            if (profilePhoto && profilePhoto.startsWith('data:')) {
+                try {
+                    await clientsService.uploadPhoto(client.id, profilePhoto);
+                    toast.success('Foto actualizada');
+                } catch {
+                    toast.warning('Datos guardados, pero falló la subida de la foto');
+                }
             }
+
+            toast.success('Cliente actualizado');
+            onSuccess({ ...updated, profilePhoto: profilePhoto || updated.profilePhoto });
+            onClose();
         } catch (error) {
             console.error(error);
             toast.error('Error al actualizar cliente');
@@ -72,6 +103,7 @@ export function ClientEditModal({ client, open, onClose, onSuccess }: ClientEdit
     };
 
     return (
+        <>
         <Dialog open={open} onOpenChange={onClose}>
             <DialogContent className="max-w-md">
                 <DialogHeader>
@@ -79,6 +111,71 @@ export function ClientEditModal({ client, open, onClose, onSuccess }: ClientEdit
                     <DialogDescription>Actualiza los datos del cliente</DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
+
+                    {/* ── Foto de perfil ── */}
+                    <div className="space-y-2">
+                        <Label>Foto de Perfil</Label>
+                        <div className="flex items-center gap-4">
+                            {/* Avatar */}
+                            <div className="relative w-20 h-20 shrink-0">
+                                {profilePhoto ? (
+                                    <img
+                                        src={profilePhoto}
+                                        alt="Foto de perfil"
+                                        className="w-20 h-20 rounded-full object-cover border-2 border-border"
+                                    />
+                                ) : (
+                                    <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center border-2 border-dashed border-border">
+                                        <UserCircle size={40} className="text-muted-foreground" />
+                                    </div>
+                                )}
+                            </div>
+                            {/* Botones */}
+                            <div className="flex flex-col gap-2 flex-1">
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-1.5 flex-1"
+                                        onClick={() => document.getElementById('edit-photo-upload')?.click()}
+                                    >
+                                        <Upload size={15} />
+                                        Subir
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-1.5 flex-1"
+                                        onClick={() => setIsWebcamOpen(true)}
+                                    >
+                                        <Camera size={15} />
+                                        Cámara
+                                    </Button>
+                                </div>
+                                {profilePhoto && (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="gap-1.5 text-destructive hover:text-destructive w-full"
+                                        onClick={() => setProfilePhoto('')}
+                                    >
+                                        <X size={14} />
+                                        Eliminar foto
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                        <input
+                            id="edit-photo-upload"
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handlePhotoUpload}
+                        />
+                    </div>
                     <div className="space-y-2">
                         <Label htmlFor="edit-name">Nombre Completo *</Label>
                         <Input
@@ -147,5 +244,15 @@ export function ClientEditModal({ client, open, onClose, onSuccess }: ClientEdit
                 </form>
             </DialogContent>
         </Dialog>
+
+        <WebcamCaptureModal
+            open={isWebcamOpen}
+            onClose={() => setIsWebcamOpen(false)}
+            onCapture={(base64) => {
+                setProfilePhoto(base64);
+                setIsWebcamOpen(false);
+            }}
+        />
+        </>
     );
 }
