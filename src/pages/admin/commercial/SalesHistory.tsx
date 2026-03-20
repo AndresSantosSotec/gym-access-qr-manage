@@ -2,19 +2,21 @@ import { useState, useEffect } from 'react';
 import {
     FileText,
     CheckCircle,
+    CalendarBlank,
     MagnifyingGlass,
     Eye,
     ArrowsClockwise,
     Plus,
     ArrowRight,
     CurrencyDollar,
+    DownloadSimple,
     User,
     Printer,
     Receipt,
 } from '@phosphor-icons/react';
 import { commercialService } from '@/services/commercial.service';
 import { receiptsService } from '@/services/receipts.service';
-import type { Venta } from '@/types/models';
+import type { SalesCashCutSummary, Venta } from '@/types/models';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,8 +35,16 @@ import { es } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 
 export function SalesHistory() {
+    const today = new Date().toISOString().slice(0, 10);
     const [sales, setSales] = useState<Venta[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -43,11 +53,23 @@ export function SalesHistory() {
     const [previewHtml, setPreviewHtml] = useState('');
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewLoading, setPreviewLoading] = useState(false);
+    const [cashCutFrom, setCashCutFrom] = useState(today);
+    const [cashCutTo, setCashCutTo] = useState(today);
+    const [cashCut, setCashCut] = useState<SalesCashCutSummary | null>(null);
+    const [cashCutLoading, setCashCutLoading] = useState(true);
+    const [page, setPage] = useState(1);
+    const [perPage, setPerPage] = useState(10);
+    const [downloadingPdf, setDownloadingPdf] = useState(false);
+    const [downloadingExcel, setDownloadingExcel] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
         loadSales();
     }, []);
+
+    useEffect(() => {
+        loadCashCut();
+    }, [cashCutFrom, cashCutTo]);
 
     const loadSales = async () => {
         try {
@@ -58,6 +80,22 @@ export function SalesHistory() {
             toast.error('Error al cargar historial de ventas');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const loadCashCut = async () => {
+        try {
+            setCashCutLoading(true);
+            const data = await commercialService.getSalesCashCut({
+                from: cashCutFrom,
+                to: cashCutTo,
+            });
+            setCashCut(data);
+        } catch (error) {
+            toast.error('Error al cargar el corte de caja');
+            setCashCut(null);
+        } finally {
+            setCashCutLoading(false);
         }
     };
 
@@ -127,10 +165,52 @@ export function SalesHistory() {
         }
     };
 
+    const downloadBlob = (blob: Blob, filename: string) => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+    };
+
+    const handleDownloadCashCutPdf = async () => {
+        try {
+            setDownloadingPdf(true);
+            const blob = await commercialService.downloadSalesCashCutPdf({ from: cashCutFrom, to: cashCutTo });
+            downloadBlob(blob, `corte-caja-ventas-${cashCutFrom}${cashCutFrom !== cashCutTo ? `_a_${cashCutTo}` : ''}.pdf`);
+            toast.success('Reporte PDF descargado');
+        } catch (error) {
+            toast.error('Error al descargar PDF del corte de caja');
+        } finally {
+            setDownloadingPdf(false);
+        }
+    };
+
+    const handleDownloadCashCutExcel = async () => {
+        try {
+            setDownloadingExcel(true);
+            const blob = await commercialService.downloadSalesCashCutExcel({ from: cashCutFrom, to: cashCutTo });
+            downloadBlob(blob, `corte-caja-ventas-${cashCutFrom}${cashCutFrom !== cashCutTo ? `_a_${cashCutTo}` : ''}.xlsx`);
+            toast.success('Reporte Excel descargado');
+        } catch (error) {
+            toast.error('Error al descargar Excel del corte de caja');
+        } finally {
+            setDownloadingExcel(false);
+        }
+    };
+
     const filteredSales = sales.filter(s =>
         s.id.toString().includes(searchTerm) ||
         s.cliente?.nombre.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    const totalItems = filteredSales.length;
+    const lastPage = Math.max(1, Math.ceil(totalItems / perPage));
+    const currentPage = Math.min(page, lastPage);
+    const paginatedSales = filteredSales.slice((currentPage - 1) * perPage, currentPage * perPage);
 
     const stats = {
         totalSales: sales.filter(s => s.estado === 'PAGADA').reduce((acc, s) => acc + Number(s.total), 0),
@@ -197,6 +277,119 @@ export function SalesHistory() {
 
             <Card className="border-none shadow-sm">
                 <CardHeader>
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                            <CardTitle>Corte De Caja Comercial</CardTitle>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Consulta ventas pagadas por rango de fechas para cierre diario o semanal.
+                            </p>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <div className="flex items-center gap-2">
+                                <CalendarBlank size={18} className="text-muted-foreground" />
+                                <Input type="date" value={cashCutFrom} onChange={(e) => setCashCutFrom(e.target.value)} className="w-[160px]" />
+                            </div>
+                            <Input type="date" value={cashCutTo} onChange={(e) => setCashCutTo(e.target.value)} className="w-[160px]" />
+                            <Button variant="outline" onClick={handleDownloadCashCutPdf} disabled={cashCutLoading || downloadingPdf} className="gap-2">
+                                <DownloadSimple size={16} />
+                                PDF
+                            </Button>
+                            <Button variant="outline" onClick={handleDownloadCashCutExcel} disabled={cashCutLoading || downloadingExcel} className="gap-2">
+                                <DownloadSimple size={16} />
+                                Excel
+                            </Button>
+                            <Button variant="outline" onClick={loadCashCut} disabled={cashCutLoading} className="gap-2">
+                                <ArrowsClockwise size={16} className={cashCutLoading ? 'animate-spin' : ''} />
+                                Actualizar
+                            </Button>
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <Card className="border border-primary/10 shadow-none bg-primary/5">
+                            <CardContent className="pt-6">
+                                <p className="text-sm uppercase tracking-wider text-primary font-medium">Total Facturado</p>
+                                <h3 className="text-3xl font-black mt-2">Q{Number(cashCut?.total_revenue || 0).toFixed(2)}</h3>
+                            </CardContent>
+                        </Card>
+                        <Card className="border border-green-500/10 shadow-none bg-green-500/5">
+                            <CardContent className="pt-6">
+                                <p className="text-sm uppercase tracking-wider text-green-700 font-medium">Ventas Pagadas</p>
+                                <h3 className="text-3xl font-black mt-2">{cashCut?.count || 0}</h3>
+                            </CardContent>
+                        </Card>
+                        <Card className="border border-amber-500/10 shadow-none bg-amber-500/5">
+                            <CardContent className="pt-6">
+                                <p className="text-sm uppercase tracking-wider text-amber-700 font-medium">Productos Vendidos</p>
+                                <h3 className="text-3xl font-black mt-2">{cashCut?.total_items || 0}</h3>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {cashCutLoading ? (
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <Skeleton className="h-40 w-full" />
+                            <Skeleton className="h-40 w-full" />
+                        </div>
+                    ) : (
+                        <div className="grid gap-4 xl:grid-cols-2">
+                            <Card className="shadow-none">
+                                <CardHeader>
+                                    <CardTitle className="text-base">Totales Por Método De Pago</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    {cashCut?.by_method?.length ? cashCut.by_method.map((item) => (
+                                        <div key={item.method} className="flex items-center justify-between rounded-lg border px-4 py-3">
+                                            <span className="font-medium">{item.method}</span>
+                                            <span className="font-black text-primary">Q{Number(item.amount).toFixed(2)}</span>
+                                        </div>
+                                    )) : (
+                                        <p className="text-sm text-muted-foreground">No hay ventas pagadas en el rango seleccionado.</p>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            <Card className="shadow-none">
+                                <CardHeader>
+                                    <CardTitle className="text-base">Productos Más Vendidos</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    {cashCut?.top_products?.length ? cashCut.top_products.map((item) => (
+                                        <div key={item.product_id} className="flex items-center justify-between rounded-lg border px-4 py-3 gap-4">
+                                            <div>
+                                                <p className="font-medium">{item.name}</p>
+                                                <p className="text-xs text-muted-foreground">{item.quantity} unidades</p>
+                                            </div>
+                                            <span className="font-black">Q{Number(item.amount).toFixed(2)}</span>
+                                        </div>
+                                    )) : (
+                                        <p className="text-sm text-muted-foreground">Aún no hay productos vendidos en el rango seleccionado.</p>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
+                    )}
+
+                    {!cashCutLoading && !!cashCut?.daily_totals?.length && (
+                        <div className="space-y-3">
+                            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Resumen Diario</h3>
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                {cashCut.daily_totals.map((day) => (
+                                    <div key={day.date} className="rounded-xl border bg-accent/20 p-4">
+                                        <p className="text-xs uppercase tracking-wide text-muted-foreground">{format(new Date(`${day.date}T00:00:00`), 'dd MMM yyyy', { locale: es })}</p>
+                                        <p className="text-2xl font-black mt-2">Q{Number(day.amount).toFixed(2)}</p>
+                                        <p className="text-sm text-muted-foreground mt-1">{day.count} ventas pagadas</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm">
+                <CardHeader>
                     <div className="flex items-center justify-between">
                         <CardTitle>Transacciones Recientes</CardTitle>
                         <div className="relative w-72">
@@ -252,7 +445,7 @@ export function SalesHistory() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {filteredSales.map((sale) => (
+                                {paginatedSales.map((sale) => (
                                     <TableRow key={sale.id} className="group transition-colors">
                                         <TableCell className="font-mono font-bold"># {String(sale.id).padStart(5, '0')}</TableCell>
                                         <TableCell className="text-muted-foreground text-xs">
@@ -330,7 +523,7 @@ export function SalesHistory() {
 
                                     </TableRow>
                                 ))}
-                                {filteredSales.length === 0 && (
+                                {paginatedSales.length === 0 && (
                                     <TableRow>
                                         <TableCell colSpan={6} className="h-40 text-center text-muted-foreground">
                                             No se encontraron transacciones
@@ -340,6 +533,43 @@ export function SalesHistory() {
                             </TableBody>
                         </Table>
                     )}
+
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 py-4 border-t mt-4">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm text-muted-foreground">Filas por página</span>
+                            <Select
+                                value={String(perPage)}
+                                onValueChange={(value) => {
+                                    setPerPage(Number(value));
+                                    setPage(1);
+                                }}
+                            >
+                                <SelectTrigger className="h-8 w-[95px]">
+                                    <SelectValue placeholder="Filas" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="10">10</SelectItem>
+                                    <SelectItem value="15">15</SelectItem>
+                                    <SelectItem value="25">25</SelectItem>
+                                    <SelectItem value="50">50</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <span className="text-sm text-muted-foreground">
+                                {totalItems === 0
+                                    ? '0 resultados'
+                                    : `Mostrando ${(currentPage - 1) * perPage + 1} a ${Math.min(currentPage * perPage, totalItems)} de ${totalItems} resultados`}
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">Página {currentPage} de {lastPage}</span>
+                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>
+                                ‹
+                            </Button>
+                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" disabled={currentPage >= lastPage} onClick={() => setPage((value) => Math.min(lastPage, value + 1))}>
+                                ›
+                            </Button>
+                        </div>
+                    </div>
                 </CardContent>
             </Card>
 

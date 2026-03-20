@@ -118,6 +118,36 @@ export interface AccessLog {
   clientName?: string;
 }
 
+export interface AccessLogRecord {
+  id: number;
+  client_id: number;
+  access_time: string;
+  access_type: 'entry' | 'exit';
+  verification_method: 'qr' | 'fingerprint';
+  status: 'allowed' | 'denied';
+  notes?: string | null;
+  qr_code?: string | null;
+  fingerprint_id?: string | null;
+  client?: {
+    id: number;
+    first_name?: string;
+    last_name?: string;
+    full_name?: string;
+    email?: string;
+    phone?: string;
+    dni?: string;
+    status?: string;
+  };
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+}
+
 export type PermissionKey =
   | 'DASHBOARD_VIEW'
   | 'CLIENTS_VIEW' | 'CLIENTS_CREATE' | 'CLIENTS_EDIT' | 'CLIENTS_DELETE'
@@ -128,6 +158,7 @@ export type PermissionKey =
   | 'INVENTORY_VIEW' | 'INVENTORY_IN' | 'INVENTORY_OUT' | 'INVENTORY_MANAGE'
   | 'PRODUCTS_VIEW' | 'PRODUCTS_CREATE' | 'PRODUCTS_EDIT' | 'PRODUCTS_DELETE'
   | 'SALES_VIEW' | 'SALES_CREATE' | 'QUOTES_VIEW' | 'SALES_CLIENTS_MANAGE'
+  | 'ACCESS_VIEW' | 'ACCESS_MANAGE'
   | 'SETTINGS_VIEW' | 'SETTINGS_MANAGE'
   | 'ROLES_VIEW' | 'ROLES_MANAGE'
   | 'USERS_VIEW' | 'USERS_MANAGE'
@@ -433,6 +464,36 @@ export interface Venta {
   pagos?: PagoVenta[];
   receipt?: { id: number; receipt_number: string; status: string } | null;
   created_at: string;
+}
+
+export interface SalesCashCutMethodTotal {
+  method: string;
+  amount: number;
+}
+
+export interface SalesCashCutDailyTotal {
+  date: string;
+  amount: number;
+  count: number;
+}
+
+export interface SalesCashCutProductTotal {
+  product_id: number;
+  name: string;
+  quantity: number;
+  amount: number;
+}
+
+export interface SalesCashCutSummary {
+  from: string;
+  to: string;
+  count: number;
+  total_revenue: number;
+  total_items: number;
+  by_method: SalesCashCutMethodTotal[];
+  daily_totals: SalesCashCutDailyTotal[];
+  top_products: SalesCashCutProductTotal[];
+  sales: Venta[];
 }
 
 export interface VentaDetalle {

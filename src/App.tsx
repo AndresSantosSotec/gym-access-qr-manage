@@ -4,6 +4,7 @@ import { useThemeColors } from '@/hooks/useThemeColors';
 import { AdminLogin } from '@/pages/auth/AdminLogin';
 import { AdminLayout } from '@/pages/admin/AdminLayout';
 import { Dashboard } from '@/pages/admin/Dashboard';
+import { Checkins } from '@/pages/admin/Checkins';
 import { ClientsList } from '@/pages/admin/ClientsList';
 import { ClientDetail } from '@/pages/admin/ClientDetail';
 import { Memberships } from '@/pages/admin/Memberships';
@@ -118,6 +119,10 @@ function App() {
           <Route element={<PermissionGuard permission="PAYMENTS_VIEW" />}>
             <Route path="payments" element={<Payments />} />
             <Route path="receipts" element={<ReceiptsPage />} />
+          </Route>
+
+          <Route element={<PermissionGuard permission="ACCESS_VIEW" />}>
+            <Route path="checkins" element={<Checkins />} />
           </Route>
 
           {/* Control de Acceso / Huellas Digitales — ROADMAP FUTURO */}

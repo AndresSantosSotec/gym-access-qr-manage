@@ -4,6 +4,7 @@ import type {
     Producto,
     MovimientoInventario,
     Venta,
+    SalesCashCutSummary,
     ClienteVenta,
     Marca,
     Presentacion,
@@ -67,6 +68,18 @@ export const commercialService = {
     getSale: async (id: number) => {
         const response = await api.get<Venta>(`/ventas/${id}`);
         return response.data;
+    },
+    getSalesCashCut: async (params: { from: string; to: string; method?: string }) => {
+        const response = await api.get<SalesCashCutSummary>('/ventas/corte-caja', { params });
+        return response.data;
+    },
+    downloadSalesCashCutPdf: async (params: { from: string; to: string; method?: string }) => {
+        const response = await api.get('/ventas/corte-caja/pdf', { params, responseType: 'blob' });
+        return response.data as Blob;
+    },
+    downloadSalesCashCutExcel: async (params: { from: string; to: string; method?: string }) => {
+        const response = await api.get('/ventas/corte-caja/excel', { params, responseType: 'blob' });
+        return response.data as Blob;
     },
     updateSale: async (id: number, data: any) => {
         const response = await api.patch<Venta>(`/ventas/${id}`, data);
