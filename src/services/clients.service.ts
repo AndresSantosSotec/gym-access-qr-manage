@@ -285,8 +285,11 @@ export const clientsService = {
    */
   identifyFingerprint: async (fingerprintTemplate: string, threshold?: number): Promise<{
     match: boolean;
+    status?: 'accept' | 'retry' | 'reject';
     allowed?: boolean;
     similarity_pct?: number;
+    candidate_name?: string;
+    candidate_id?: number;
     client?: any;
     message?: string;
     error?: string;
@@ -312,9 +315,12 @@ export const clientsService = {
 
     if (!pythonResult?.match) {
       return {
-        match: false,
+        match:          false,
+        status:         pythonResult?.status,         // 'retry' | 'reject'
         similarity_pct: pythonResult?.similarity_pct,
-        message: pythonResult?.message ?? 'No se encontró coincidencia.',
+        candidate_name: pythonResult?.candidate_name, // set when status==='retry'
+        candidate_id:   pythonResult?.candidate_id,
+        message:        pythonResult?.message ?? 'No se encontró coincidencia.',
       };
     }
 

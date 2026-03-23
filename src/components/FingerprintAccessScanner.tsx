@@ -33,8 +33,10 @@ import { clientsService } from '@/services/clients.service';
 
 interface IdentifyResult {
   match: boolean;
+  status?: 'accept' | 'retry' | 'reject';
   allowed?: boolean;
   similarity_pct?: number;
+  candidate_name?: string;
   client?: {
     id: number;
     first_name: string;
@@ -46,7 +48,7 @@ interface IdentifyResult {
   message?: string;
 }
 
-type ScanState = 'idle' | 'processing' | 'matched' | 'denied' | 'no_match' | 'error';
+type ScanState = 'idle' | 'processing' | 'matched' | 'denied' | 'no_match' | 'error' | 'retry';
 
 interface Props {
   open: boolean;
@@ -80,11 +82,17 @@ export function FingerprintAccessScanner({ open, onClose }: Props) {
     setResult(null);
     setErrorMsg('');
 
+    // Default reset delay; retry gets a shorter one so user can rescan quickly
+    let cooldownMs = COOLDOWN_MS;
+
     try {
       const data = await clientsService.identifyFingerprint(sample.imageBase64);
       setResult(data as IdentifyResult);
 
-      if (!data.match) {
+      if (data.status === 'retry') {
+        setScanState('retry');
+        cooldownMs = 1500;   // release quickly so user can confirm within 3 s
+      } else if (!data.match) {
         setScanState('no_match');
       } else if (data.allowed) {
         setScanState('matched');
@@ -96,12 +104,11 @@ export function FingerprintAccessScanner({ open, onClose }: Props) {
       setErrorMsg(msg);
       setScanState('error');
     } finally {
-      // Reset after cooldown so next scan can proceed
       setTimeout(() => {
         cooldownRef.current = false;
         setScanState('idle');
         setResult(null);
-      }, COOLDOWN_MS);
+      }, cooldownMs);
     }
   }, []);
 
@@ -126,6 +133,7 @@ export function FingerprintAccessScanner({ open, onClose }: Props) {
     denied:     'border-orange-400',
     no_match:   'border-red-500',
     error:      'border-red-500',
+    retry:      'border-amber-400 animate-pulse',
   };
 
   const img = photoUrl(result?.client?.photo_public_path);
@@ -173,6 +181,9 @@ export function FingerprintAccessScanner({ open, onClose }: Props) {
             {scanState === 'idle' && (
               <Fingerprint size={64} weight="light" className="text-muted-foreground animate-pulse" />
             )}
+            {scanState === 'retry' && (
+              <Fingerprint size={64} weight="duotone" className="text-amber-400 animate-pulse" />
+            )}
             {scanState === 'processing' && (
               <SpinnerGap size={64} weight="bold" className="text-blue-500 animate-spin" />
             )}
@@ -186,6 +197,13 @@ export function FingerprintAccessScanner({ open, onClose }: Props) {
             {/* State text */}
             <p className="text-center text-sm font-medium text-muted-foreground">
               {scanState === 'idle'       && (isCapturing ? 'Coloca el dedo en el lector…' : 'Inicia la captura para escanear')}
+              {scanState === 'retry'      && (
+                <span className="text-amber-600 font-semibold">
+                  {(result as IdentifyResult | null)?.candidate_name
+                    ? `¡Confirma: ${(result as IdentifyResult | null)?.candidate_name}!`
+                    : '¡Coloca el dedo nuevamente para confirmar!'}
+                </span>
+              )}
               {scanState === 'processing' && 'Identificando…'}
               {scanState === 'no_match'   && 'Huella no registrada'}
               {scanState === 'error'      && `Error: ${errorMsg}`}

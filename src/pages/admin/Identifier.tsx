@@ -27,8 +27,11 @@ import { clientsService } from '@/services/clients.service';
 
 interface IdentifyResult {
     match: boolean;
+    status?: 'accept' | 'retry' | 'reject';
     allowed?: boolean;
     similarity_pct?: number;
+    candidate_name?: string;
+    candidate_id?: number;
     client?: {
         id: number;
         first_name?: string;
@@ -41,7 +44,7 @@ interface IdentifyResult {
     error?: string;
 }
 
-type KioskState = 'idle' | 'processing' | 'allowed' | 'denied' | 'no_match' | 'sdk_error';
+type KioskState = 'idle' | 'processing' | 'allowed' | 'denied' | 'no_match' | 'sdk_error' | 'retry';
 
 const RESULT_DISPLAY_MS = 4500;
 
@@ -59,8 +62,10 @@ export function Identifier() {
     const [kioskState, setKioskState] = useState<KioskState>('idle');
     const [result, setResult]         = useState<IdentifyResult | null>(null);
     const [countdown, setCountdown]   = useState(0);
+    const [retrySeconds, setRetrySeconds] = useState(0);
     const cooldownRef                 = useRef(false);
     const timerRef                    = useRef<ReturnType<typeof setInterval> | null>(null);
+    const retryTimerRef               = useRef<ReturnType<typeof setInterval> | null>(null);
 
     /* Auto-reset after a result is shown */
     const startCountdown = useCallback(() => {
@@ -80,12 +85,21 @@ export function Identifier() {
         }, 1000);
     }, []);
 
-    useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
+    useEffect(() => () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+        if (retryTimerRef.current) clearInterval(retryTimerRef.current);
+    }, []);
 
     /* Called every time the WebSDK reader fires onSamplesAcquired */
     const handleSample = useCallback(async (sample: { imageBase64: string }) => {
         if (cooldownRef.current) return;
         cooldownRef.current = true;
+
+        // Cancel any running retry countdown so the new scan takes over cleanly
+        if (retryTimerRef.current) {
+            clearInterval(retryTimerRef.current);
+            retryTimerRef.current = null;
+        }
 
         setKioskState('processing');
         setResult(null);
@@ -94,16 +108,38 @@ export function Identifier() {
             const data = await clientsService.identifyFingerprint(sample.imageBase64) as IdentifyResult;
             setResult(data);
 
-            if (!data.match) {
+            if (data.status === 'retry') {
+                // Gray zone — prompt user to scan again within the 3 s window
+                setKioskState('retry');
+                setRetrySeconds(3);
+                // Release cooldown after 1.2 s so the user can rescan immediately
+                setTimeout(() => { cooldownRef.current = false; }, 1200);
+                // Countdown 3-2-1 then auto-reset to idle
+                let secs = 3;
+                retryTimerRef.current = setInterval(() => {
+                    secs -= 1;
+                    setRetrySeconds(secs);
+                    if (secs <= 0) {
+                        clearInterval(retryTimerRef.current!);
+                        retryTimerRef.current = null;
+                        cooldownRef.current = false;
+                        setKioskState('idle');
+                        setResult(null);
+                        setRetrySeconds(0);
+                    }
+                }, 1000);
+            } else if (!data.match) {
                 setKioskState('no_match');
+                startCountdown();
             } else if (data.allowed) {
                 setKioskState('allowed');
+                startCountdown();
             } else {
                 setKioskState('denied');
+                startCountdown();
             }
         } catch {
             setKioskState('no_match');
-        } finally {
             startCountdown();
         }
     }, [startCountdown]);
@@ -142,6 +178,7 @@ export function Identifier() {
         denied:    'from-orange-950 to-orange-900',
         no_match:  'from-red-950 to-red-900',
         sdk_error: 'from-yellow-950 to-yellow-900',
+        retry:     'from-amber-950 to-amber-900',
     };
 
     const clientPhoto = buildPhotoUrl(result?.client?.photo_public_path);
@@ -150,11 +187,14 @@ export function Identifier() {
 
     const manualReset = () => {
         if (timerRef.current) clearInterval(timerRef.current);
+        if (retryTimerRef.current) clearInterval(retryTimerRef.current);
         timerRef.current = null;
+        retryTimerRef.current = null;
         cooldownRef.current = false;
         setKioskState('idle');
         setResult(null);
         setCountdown(0);
+        setRetrySeconds(0);
     };
 
     return (
@@ -245,6 +285,13 @@ export function Identifier() {
                         </div>
                     )}
 
+                    {/* Retry: gray zone — prompt second scan within 3 s */}
+                    {kioskState === 'retry' && (
+                        <div className="w-44 h-44 rounded-full border-4 border-amber-400 bg-amber-500/10 flex items-center justify-center shadow-[0_0_40px_rgba(251,191,36,0.3)] animate-pulse">
+                            <Fingerprint size={96} weight="duotone" className="text-amber-300" />
+                        </div>
+                    )}
+
                     {/* No match icon */}
                     {kioskState === 'no_match' && (
                         <div className="w-44 h-44 rounded-full border-4 border-red-500/60 flex items-center justify-center">
@@ -275,10 +322,40 @@ export function Identifier() {
                                 )}
                             </>
                         )}
+                        {kioskState === 'retry' && (
+                            <>
+                                <p className="text-amber-200 text-2xl font-semibold animate-pulse">
+                                    ¡Coloca el dedo nuevamente!
+                                </p>
+                                {result?.candidate_name && (
+                                    <p className="text-amber-300/70 text-sm">
+                                        Verificando: {result.candidate_name}
+                                    </p>
+                                )}
+                                <p className="text-amber-400/60 text-lg font-bold">
+                                    {retrySeconds}s
+                                </p>
+                            </>
+                        )}
                         {kioskState === 'no_match' && (
                             <p className="text-red-300 text-2xl font-light">Huella no reconocida</p>
                         )}
                     </div>
+
+                    {/* Retry countdown bar */}
+                    {kioskState === 'retry' && (
+                        <div className="w-full space-y-1">
+                            <div className="w-full bg-white/10 rounded-full h-2">
+                                <div
+                                    className="h-2 rounded-full bg-amber-400 transition-all duration-1000"
+                                    style={{ width: `${(retrySeconds / 3) * 100}%` }}
+                                />
+                            </div>
+                            <p className="text-center text-xs text-amber-400/50">
+                                Ventana de confirmación
+                            </p>
+                        </div>
+                    )}
 
                     {/* Countdown bar */}
                     {countdown > 0 && (
