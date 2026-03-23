@@ -291,11 +291,11 @@ export function ClientDetail() {
     }
   };
 
-  const handleRegisterFingerprint = async (base64: string) => {
+  const handleRegisterFingerprint = async (base64: string, allTemplates: string[]) => {
     if (!client) return;
 
     try {
-      const result = await clientsService.registerFingerprint(client.id, base64);
+      const result = await clientsService.registerFingerprint(client.id, base64, allTemplates);
 
       const fingerprintId = result.fingerprint_id || `FP-${client.id}-${Date.now()}`;
       const registeredAt = result.registered_at || new Date().toISOString();

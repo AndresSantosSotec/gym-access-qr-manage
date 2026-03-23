@@ -18,7 +18,7 @@ interface ScanResult {
 interface FingerprintCaptureModalProps {
     open: boolean;
     onClose: () => void;
-    onCapture: (fingerprintData: string) => void;
+    onCapture: (fingerprintData: string, allTemplates: string[]) => void;
     clientName: string;
 }
 
@@ -92,7 +92,8 @@ export function FingerprintCaptureModal({
 
     const handleConfirm = () => {
         if (scans.length === 0) return;
-        onCapture(scans[0].template); // all scans equal quality in WebSDK PngImage mode
+        const allTemplates = scans.map(s => s.template);
+        onCapture(scans[0].template, allTemplates);
     };
 
     return (

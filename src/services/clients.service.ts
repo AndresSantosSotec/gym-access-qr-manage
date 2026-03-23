@@ -248,10 +248,12 @@ export const clientsService = {
 
   // ─── Fingerprint Methods ───
 
-  registerFingerprint: async (clientId: string, template: string): Promise<any> => {
-    const response = await api.post(`/clients/${clientId}/fingerprint`, {
-      fingerprint_template: template
-    });
+  registerFingerprint: async (clientId: string, template: string, allTemplates?: string[]): Promise<any> => {
+    const body: Record<string, unknown> = { fingerprint_template: template };
+    if (allTemplates && allTemplates.length > 1) {
+      body.extra_templates = allTemplates;
+    }
+    const response = await api.post(`/clients/${clientId}/fingerprint`, body);
     return response.data;
   },
 

@@ -149,6 +149,7 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans, initi
   const [isFingerprintModalOpen, setIsFingerprintModalOpen] = useState(false);
   const [fingerprintId, setFingerprintId] = useState<string>('');
   const [fingerprintBase64, setFingerprintBase64] = useState<string>('');
+  const [fingerprintAllTemplates, setFingerprintAllTemplates] = useState<string[]>([]);
   const [fingerprintRegisteredAt, setFingerprintRegisteredAt] = useState<string>('');
 
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
@@ -334,10 +335,11 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans, initi
     setProfilePhoto('');
   };
 
-  const handleRegisterFingerprint = (base64: string) => {
+  const handleRegisterFingerprint = (base64: string, allTemplates: string[]) => {
     const fpId = `FP-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     setFingerprintId(fpId);
     setFingerprintBase64(base64);
+    setFingerprintAllTemplates(allTemplates);
     setFingerprintRegisteredAt(new Date().toISOString());
     setIsFingerprintModalOpen(false);
     toast.success('Huella capturada temporalmente');
@@ -471,7 +473,7 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans, initi
 
       if (fingerprintBase64) {
         try {
-          await clientsService.registerFingerprint(newClient.id, fingerprintBase64);
+          await clientsService.registerFingerprint(newClient.id, fingerprintBase64, fingerprintAllTemplates);
           toast.success('Huella registrada en el servidor');
         } catch (fpError) {
           console.error('Error registering fingerprint', fpError);
