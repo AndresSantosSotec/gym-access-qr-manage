@@ -251,7 +251,8 @@ export const clientsService = {
   registerFingerprint: async (clientId: string, template: string, allTemplates?: string[]): Promise<any> => {
     const body: Record<string, unknown> = { fingerprint_template: template };
     if (allTemplates && allTemplates.length > 1) {
-      body.extra_templates = allTemplates;
+      // slice(1): template[0] is already in fingerprint_template — avoid sending it twice
+      body.extra_templates = allTemplates.slice(1);
     }
     const response = await api.post(`/clients/${clientId}/fingerprint`, body);
     return response.data;

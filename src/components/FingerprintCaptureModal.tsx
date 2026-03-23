@@ -9,6 +9,29 @@ import { useFingerprint } from '@/hooks/useFingerprint';
 
 const REQUIRED_SCANS = 4;
 
+/**
+ * Compress a PNG base64 fingerprint image to 256×256 JPEG.
+ * The Python server uses _FP_COMPARE_SIZE=(256,256) anyway, so no quality loss.
+ * Reduces payload from ~80KB/image (PNG) to ~15KB/image (JPEG 85%).
+ */
+async function compressImage(base64png: string): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return reject(new Error('No canvas context'));
+            ctx.drawImage(img, 0, 0, 256, 256);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            resolve(dataUrl.replace(/^data:image\/jpeg;base64,/, ''));
+        };
+        img.onerror = () => reject(new Error('Failed to load fingerprint image'));
+        img.src = `data:image/png;base64,${base64png}`;
+    });
+}
+
 interface ScanResult {
     template: string;
     image_base64: string;
@@ -30,6 +53,7 @@ export function FingerprintCaptureModal({
 }: FingerprintCaptureModalProps) {
     const [phase, setPhase] = useState<'intro' | 'scanning' | 'done'>('intro');
     const [scans, setScans] = useState<ScanResult[]>([]);
+    const [isCompressing, setIsCompressing] = useState(false);
 
     // Called by the hook every time the reader fires onSamplesAcquired
     // Mirrors sampleAcquired() in the vanilla example
@@ -90,10 +114,20 @@ export function FingerprintCaptureModal({
         setPhase('intro');
     };
 
-    const handleConfirm = () => {
-        if (scans.length === 0) return;
-        const allTemplates = scans.map(s => s.template);
-        onCapture(scans[0].template, allTemplates);
+    const handleConfirm = async () => {
+        if (scans.length === 0 || isCompressing) return;
+        setIsCompressing(true);
+        try {
+            // Compress all captures to 256×256 JPEG to stay well under server limits
+            const compressed = await Promise.all(scans.map(s => compressImage(s.template)));
+            onCapture(compressed[0], compressed);
+        } catch {
+            // If compression fails (e.g. old browser), send originals
+            const allTemplates = scans.map(s => s.template);
+            onCapture(scans[0].template, allTemplates);
+        } finally {
+            setIsCompressing(false);
+        }
     };
 
     return (
@@ -300,9 +334,9 @@ export function FingerprintCaptureModal({
                             </Button>
                         )}
                         {allDone && (
-                            <Button onClick={handleConfirm} className="bg-green-600 hover:bg-green-700 gap-2">
+                            <Button onClick={handleConfirm} disabled={isCompressing} className="bg-green-600 hover:bg-green-700 gap-2">
                                 <ShieldCheck size={16} weight="bold" />
-                                Guardar Huella
+                                {isCompressing ? 'Procesando...' : 'Guardar Huella'}
                             </Button>
                         )}
                     </div>
