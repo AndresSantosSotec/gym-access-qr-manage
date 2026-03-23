@@ -285,7 +285,7 @@ export const clientsService = {
    */
   identifyFingerprint: async (fingerprintTemplate: string, threshold?: number): Promise<{
     match: boolean;
-    status?: 'accept' | 'retry' | 'reject';
+    status?: 'accept' | 'retry' | 'reject' | 'quality';
     allowed?: boolean;
     similarity_pct?: number;
     candidate_name?: string;

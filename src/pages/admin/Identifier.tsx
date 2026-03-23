@@ -27,7 +27,7 @@ import { clientsService } from '@/services/clients.service';
 
 interface IdentifyResult {
     match: boolean;
-    status?: 'accept' | 'retry' | 'reject';
+    status?: 'accept' | 'retry' | 'reject' | 'quality';
     allowed?: boolean;
     similarity_pct?: number;
     candidate_name?: string;
@@ -44,7 +44,7 @@ interface IdentifyResult {
     error?: string;
 }
 
-type KioskState = 'idle' | 'processing' | 'allowed' | 'denied' | 'no_match' | 'sdk_error' | 'retry';
+type KioskState = 'idle' | 'processing' | 'allowed' | 'denied' | 'no_match' | 'sdk_error' | 'retry' | 'quality';
 
 const RESULT_DISPLAY_MS = 4500;
 
@@ -128,6 +128,14 @@ export function Identifier() {
                         setRetrySeconds(0);
                     }
                 }, 1000);
+            } else if (data.status === 'quality') {
+                // Probe too blurry — brief flash, then back to idle quickly
+                setKioskState('quality');
+                setTimeout(() => {
+                    cooldownRef.current = false;
+                    setKioskState('idle');
+                    setResult(null);
+                }, 2000);
             } else if (!data.match) {
                 setKioskState('no_match');
                 startCountdown();
@@ -179,6 +187,7 @@ export function Identifier() {
         no_match:  'from-red-950 to-red-900',
         sdk_error: 'from-yellow-950 to-yellow-900',
         retry:     'from-amber-950 to-amber-900',
+        quality:   'from-sky-950 to-sky-900',
     };
 
     const clientPhoto = buildPhotoUrl(result?.client?.photo_public_path);
@@ -299,6 +308,13 @@ export function Identifier() {
                         </div>
                     )}
 
+                    {/* Quality: blurry probe — press harder */}
+                    {kioskState === 'quality' && (
+                        <div className="w-44 h-44 rounded-full border-4 border-sky-400/60 flex items-center justify-center animate-pulse">
+                            <Fingerprint size={96} weight="light" className="text-sky-300" />
+                        </div>
+                    )}
+
                     {/* Status message */}
                     <div className="text-center space-y-1">
                         {kioskState === 'idle' && (
@@ -339,6 +355,12 @@ export function Identifier() {
                         )}
                         {kioskState === 'no_match' && (
                             <p className="text-red-300 text-2xl font-light">Huella no reconocida</p>
+                        )}
+                        {kioskState === 'quality' && (
+                            <>
+                                <p className="text-sky-200 text-2xl font-semibold">Coloca el dedo con más presión</p>
+                                <p className="text-sky-300/60 text-sm">Imagen borrosa — inténtalo de nuevo</p>
+                            </>
                         )}
                     </div>
 

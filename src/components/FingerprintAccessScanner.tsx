@@ -33,7 +33,7 @@ import { clientsService } from '@/services/clients.service';
 
 interface IdentifyResult {
   match: boolean;
-  status?: 'accept' | 'retry' | 'reject';
+  status?: 'accept' | 'retry' | 'reject' | 'quality';
   allowed?: boolean;
   similarity_pct?: number;
   candidate_name?: string;
@@ -48,7 +48,7 @@ interface IdentifyResult {
   message?: string;
 }
 
-type ScanState = 'idle' | 'processing' | 'matched' | 'denied' | 'no_match' | 'error' | 'retry';
+type ScanState = 'idle' | 'processing' | 'matched' | 'denied' | 'no_match' | 'error' | 'retry' | 'quality';
 
 interface Props {
   open: boolean;
@@ -92,6 +92,9 @@ export function FingerprintAccessScanner({ open, onClose }: Props) {
       if (data.status === 'retry') {
         setScanState('retry');
         cooldownMs = 1500;   // release quickly so user can confirm within 3 s
+      } else if (data.status === 'quality') {
+        setScanState('quality');
+        cooldownMs = 2000;   // brief flash, then back to idle
       } else if (!data.match) {
         setScanState('no_match');
       } else if (data.allowed) {
@@ -134,6 +137,7 @@ export function FingerprintAccessScanner({ open, onClose }: Props) {
     no_match:   'border-red-500',
     error:      'border-red-500',
     retry:      'border-amber-400 animate-pulse',
+    quality:    'border-sky-400 animate-pulse',
   };
 
   const img = photoUrl(result?.client?.photo_public_path);
@@ -184,6 +188,9 @@ export function FingerprintAccessScanner({ open, onClose }: Props) {
             {scanState === 'retry' && (
               <Fingerprint size={64} weight="duotone" className="text-amber-400 animate-pulse" />
             )}
+            {scanState === 'quality' && (
+              <Fingerprint size={64} weight="light" className="text-sky-400 animate-pulse" />
+            )}
             {scanState === 'processing' && (
               <SpinnerGap size={64} weight="bold" className="text-blue-500 animate-spin" />
             )}
@@ -202,6 +209,11 @@ export function FingerprintAccessScanner({ open, onClose }: Props) {
                   {(result as IdentifyResult | null)?.candidate_name
                     ? `¡Confirma: ${(result as IdentifyResult | null)?.candidate_name}!`
                     : '¡Coloca el dedo nuevamente para confirmar!'}
+                </span>
+              )}
+              {scanState === 'quality'    && (
+                <span className="text-sky-600 font-semibold">
+                  Coloca el dedo con más presión
                 </span>
               )}
               {scanState === 'processing' && 'Identificando…'}
