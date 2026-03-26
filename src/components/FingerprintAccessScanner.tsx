@@ -8,7 +8,7 @@
  *   4. Si hay coincidencia se muestra la tarjeta del cliente (acceso OK / denegado).
  *   5. Se respeta un cooldown de 3 s entre escaneos para no saturar el servidor.
  */
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -34,8 +34,15 @@ import { clientsService } from '@/services/clients.service';
 interface IdentifyResult {
   match: boolean;
   status?: 'accept' | 'retry' | 'reject' | 'quality';
+  decision_reason?: string;
   allowed?: boolean;
   similarity_pct?: number;
+  best_score?: number;
+  second_best_score?: number;
+  gap?: number;
+  quality_score?: number;
+  blur_score?: number;
+  confirm_window_sec?: number;
   candidate_name?: string;
   client?: {
     id: number;
@@ -71,7 +78,15 @@ export function FingerprintAccessScanner({ open, onClose }: Props) {
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [result, setResult]       = useState<IdentifyResult | null>(null);
   const [errorMsg, setErrorMsg]   = useState<string>('');
+  const [retryCountdown, setRetryCountdown] = useState<number>(0);
   const cooldownRef               = useRef(false);
+  const showDebug = typeof window !== 'undefined' && window.localStorage.getItem('fp_debug') === '1';
+
+  useEffect(() => {
+    if (scanState !== 'retry' || retryCountdown <= 0) return;
+    const id = window.setTimeout(() => setRetryCountdown((v) => Math.max(0, v - 1)), 1000);
+    return () => window.clearTimeout(id);
+  }, [scanState, retryCountdown]);
 
   /* Called on every fingerprint acquisition from the WebSDK reader */
   const handleSample = useCallback(async (sample: { imageBase64: string }) => {
@@ -91,15 +106,20 @@ export function FingerprintAccessScanner({ open, onClose }: Props) {
 
       if (data.status === 'retry') {
         setScanState('retry');
+        setRetryCountdown(Math.max(1, data.confirm_window_sec ?? 10));
         cooldownMs = 1500;   // release quickly so user can confirm within 3 s
       } else if (data.status === 'quality') {
         setScanState('quality');
+        setRetryCountdown(0);
         cooldownMs = 2000;   // brief flash, then back to idle
       } else if (!data.match) {
+        setRetryCountdown(0);
         setScanState('no_match');
       } else if (data.allowed) {
+        setRetryCountdown(0);
         setScanState('matched');
       } else {
+        setRetryCountdown(0);
         setScanState('denied');
       }
     } catch (err: unknown) {
@@ -209,11 +229,14 @@ export function FingerprintAccessScanner({ open, onClose }: Props) {
                   {(result as IdentifyResult | null)?.candidate_name
                     ? `¡Confirma: ${(result as IdentifyResult | null)?.candidate_name}!`
                     : '¡Coloca el dedo nuevamente para confirmar!'}
+                  {retryCountdown > 0 ? ` (${retryCountdown}s)` : ''}
                 </span>
               )}
               {scanState === 'quality'    && (
                 <span className="text-sky-600 font-semibold">
-                  Coloca el dedo con más presión
+                  {result?.decision_reason === 'blur_too_low'
+                    ? 'Calidad insuficiente: limpia el dedo, presiona mejor y cubre toda la yema'
+                    : 'Calidad insuficiente: mejora la posición del dedo'}
                 </span>
               )}
               {scanState === 'processing' && 'Identificando…'}
@@ -261,6 +284,14 @@ export function FingerprintAccessScanner({ open, onClose }: Props) {
             {/* Quality indicator */}
             {qualityText && scanState === 'idle' && (
               <p className="text-xs text-muted-foreground">Calidad: {qualityText}</p>
+            )}
+
+            {showDebug && result && (
+              <div className="w-full rounded border bg-muted/30 p-2 text-[11px] font-mono text-muted-foreground">
+                dec={result.status} reason={result.decision_reason ?? '-'} sim={result.similarity_pct ?? '-'}%
+                {' '}best={result.best_score ?? '-'} second={result.second_best_score ?? '-'} gap={result.gap ?? '-'}
+                {' '}q={result.quality_score ?? '-'} blur={result.blur_score ?? '-'}
+              </div>
             )}
           </div>
         )}

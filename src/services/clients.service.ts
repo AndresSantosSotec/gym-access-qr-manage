@@ -249,7 +249,15 @@ export const clientsService = {
   // ─── Fingerprint Methods ───
 
   registerFingerprint: async (clientId: string, template: string, allTemplates?: string[]): Promise<any> => {
-    const body: Record<string, unknown> = { fingerprint_template: template };
+    const body: Record<string, unknown> = {
+      fingerprint_template: template,
+      device_id: 'websdk',
+      metadata: {
+        source: 'websdk',
+        enrolled_at: new Date().toISOString(),
+        sample_count: allTemplates?.length ?? 1,
+      },
+    };
     if (allTemplates && allTemplates.length > 1) {
       // slice(1): template[0] is already in fingerprint_template — avoid sending it twice
       body.extra_templates = allTemplates.slice(1);
@@ -283,11 +291,18 @@ export const clientsService = {
    * This bypasses the old Laravel → localhost:8089 proxy path that failed on
    * the remote server (cURL error 7).
    */
-  identifyFingerprint: async (fingerprintTemplate: string, threshold?: number): Promise<{
+  identifyFingerprint: async (fingerprintTemplate: string): Promise<{
     match: boolean;
     status?: 'accept' | 'retry' | 'reject' | 'quality';
+    decision_reason?: string;
     allowed?: boolean;
     similarity_pct?: number;
+    best_score?: number;
+    second_best_score?: number;
+    gap?: number;
+    quality_score?: number;
+    blur_score?: number;
+    confirm_window_sec?: number;
     candidate_name?: string;
     candidate_id?: number;
     client?: any;
@@ -302,7 +317,6 @@ export const clientsService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fingerprint_template: fingerprintTemplate,
-          ...(threshold !== undefined ? { threshold } : {}),
         }),
       });
       pythonResult = await pythonResp.json();
@@ -317,7 +331,14 @@ export const clientsService = {
       return {
         match:          false,
         status:         pythonResult?.status,         // 'retry' | 'reject'
+        decision_reason: pythonResult?.decision_reason,
         similarity_pct: pythonResult?.similarity_pct,
+        best_score:     pythonResult?.best_score,
+        second_best_score: pythonResult?.second_best_score,
+        gap:            pythonResult?.gap,
+        quality_score:  pythonResult?.quality_score,
+        blur_score:     pythonResult?.blur_score,
+        confirm_window_sec: pythonResult?.confirm_window_sec,
         candidate_name: pythonResult?.candidate_name, // set when status==='retry'
         candidate_id:   pythonResult?.candidate_id,
         message:        pythonResult?.message ?? 'No se encontró coincidencia.',
