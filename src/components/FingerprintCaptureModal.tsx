@@ -55,11 +55,13 @@ export function FingerprintCaptureModal({
     const [scans, setScans] = useState<ScanResult[]>([]);
     const [isCompressing, setIsCompressing] = useState(false);
 
-    // Called by the hook every time the reader fires onSamplesAcquired
-    // Mirrors sampleAcquired() in the vanilla example
+    // Called by the hook every time the reader fires onSamplesAcquired.
+    // Deduplicates by checking if the last scan is identical (same image = finger not lifted).
     const handleSample = useCallback((sample: { imageDataUrl: string; imageBase64: string }) => {
         setScans((prev) => {
             if (prev.length >= REQUIRED_SCANS) return prev;
+            // Skip if identical to the last captured scan (finger held still)
+            if (prev.length > 0 && prev[prev.length - 1].image_base64 === sample.imageBase64) return prev;
             return [...prev, { template: sample.imageBase64, image_base64: sample.imageBase64, mode: 'websdk' }];
         });
     }, []);

@@ -49,14 +49,18 @@ export function useFingerprint(onSample?: (s: FingerprintSample) => void) {
       setIsCapturing(false);
     };
 
-    // Mirrors sampleAcquired() in app.js — PngImage format
+    // Mirrors sampleAcquired() in app.js — PngImage format.
+    // The SDK may return MULTIPLE samples per acquisition event (one per finger
+    // placement captured in batch). We iterate all of them so every image
+    // is forwarded to the modal — not just samples[0].
     sdk.onSamplesAcquired = (s) => {
       try {
         const samples: string[] = JSON.parse(s.samples);
-        // Same line as example: "data:image/png;base64," + Fingerprint.b64UrlTo64(samples[0])
-        const imageDataUrl = 'data:image/png;base64,' + fp.b64UrlTo64(samples[0]);
-        const imageBase64  = fp.b64UrlTo64(samples[0]); // raw base64 for backend
-        onSampleRef.current?.({ imageDataUrl, imageBase64 });
+        for (const sample of samples) {
+          const imageBase64  = fp.b64UrlTo64(sample);
+          const imageDataUrl = 'data:image/png;base64,' + imageBase64;
+          onSampleRef.current?.({ imageDataUrl, imageBase64 });
+        }
       } catch (e: unknown) {
         setStatus('Error procesando muestra: ' + (e instanceof Error ? e.message : String(e)));
       }

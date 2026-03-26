@@ -256,6 +256,7 @@ export const clientsService = {
         source: 'websdk',
         enrolled_at: new Date().toISOString(),
         sample_count: allTemplates?.length ?? 1,
+        image_base64: template,
       },
     };
     if (allTemplates && allTemplates.length > 1) {

@@ -57,6 +57,8 @@ import {
   TrendDown,
   Warning,
   PencilSimple,
+  Eye,
+  MagnifyingGlassPlus,
 } from '@phosphor-icons/react';
 import type { Client, EconomicProfileItem, MembershipPlan } from '@/types/models';
 import { recurrenteService } from '@/services/recurrente.service';
@@ -83,6 +85,7 @@ export function ClientDetail() {
     quality: number | null;
     device_id: string | null;
   } | null>(null);
+  const [isFpImageOpen, setIsFpImageOpen] = useState(false);
   const [isEconomicDialogOpen, setIsEconomicDialogOpen] = useState(false);
   const [isWebcamOpen, setIsWebcamOpen] = useState(false);
   const [editingEconomicItem, setEditingEconomicItem] = useState<EconomicProfileItem | null>(null);
@@ -794,11 +797,20 @@ export function ClientDetail() {
                 {/* Left: fingerprint image or icon + info */}
                 <div className="flex items-center gap-4">
                   {storedFpData?.image_base64 ? (
-                    <img
-                      src={`data:image/png;base64,${storedFpData.image_base64}`}
-                      alt="Huella registrada"
-                      className="w-16 h-16 rounded-lg border-2 border-green-500 object-cover bg-gray-100"
-                    />
+                    <button
+                      onClick={() => setIsFpImageOpen(true)}
+                      className="relative group focus:outline-none"
+                      title="Ver huella en grande"
+                    >
+                      <img
+                        src={`data:image/png;base64,${storedFpData.image_base64}`}
+                        alt="Huella registrada"
+                        className="w-16 h-16 rounded-lg border-2 border-green-500 object-cover bg-gray-100 group-hover:opacity-75 transition-opacity"
+                      />
+                      <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <MagnifyingGlassPlus size={20} className="text-white drop-shadow-lg" weight="bold" />
+                      </span>
+                    </button>
                   ) : (
                     <Fingerprint
                       size={48}
@@ -859,6 +871,16 @@ export function ClientDetail() {
                           </>
                         )}
                       </Button>
+                      {storedFpData?.image_base64 && (
+                        <Button
+                          onClick={() => setIsFpImageOpen(true)}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <Eye className="mr-1" size={14} weight="bold" />
+                          Ver huella
+                        </Button>
+                      )}
                       <Button onClick={() => setIsRemoveFingerprintOpen(true)} variant="destructive" size="sm">
                         Eliminar
                       </Button>
@@ -877,8 +899,9 @@ export function ClientDetail() {
                 </div>
               </div>
 
-              {/* Simulator-mode warning: registered without real image */}
-              {client.fingerprintId && storedFpData && !storedFpData.image_base64 && (
+              {/* Simulator-mode warning: only for explicit simulator/default device, not websdk */}
+              {client.fingerprintId && storedFpData &&
+               (storedFpData.device_id === 'simulator' || storedFpData.device_id === 'default') && (
                 <div className="flex items-center gap-3 p-3 rounded-lg border border-yellow-400 bg-yellow-50 dark:bg-yellow-950/20 text-sm">
                   <span className="text-yellow-600 text-lg">⚠️</span>
                   <div className="flex-1">
@@ -937,6 +960,60 @@ export function ClientDetail() {
               )}
             </CardContent>
           </Card>
+
+          {/* ── Modal: ver imagen de huella en tamaño real ── */}
+          <Dialog open={isFpImageOpen} onOpenChange={setIsFpImageOpen}>
+            <DialogContent className="sm:max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Fingerprint size={20} weight="duotone" className="text-primary" />
+                  Huella Registrada
+                </DialogTitle>
+                <DialogDescription>
+                  {client?.first_name} {client?.last_name}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col items-center gap-4">
+                {storedFpData?.image_base64 ? (
+                  <img
+                    src={`data:image/png;base64,${storedFpData.image_base64}`}
+                    alt="Huella registrada"
+                    className="w-64 h-64 rounded-xl border-2 border-green-500 object-contain bg-gray-50 dark:bg-gray-900"
+                  />
+                ) : (
+                  <div className="w-64 h-64 flex items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground">
+                    <Fingerprint size={80} weight="duotone" className="text-muted-foreground" />
+                  </div>
+                )}
+                <div className="w-full text-sm space-y-1 text-muted-foreground border rounded-lg p-3">
+                  {storedFpData?.quality && (
+                    <div className="flex justify-between">
+                      <span>Calidad</span>
+                      <span className="font-medium text-foreground">{storedFpData.quality}%</span>
+                    </div>
+                  )}
+                  {storedFpData?.device_id && (
+                    <div className="flex justify-between">
+                      <span>Dispositivo</span>
+                      <span className="font-medium text-foreground">{storedFpData.device_id}</span>
+                    </div>
+                  )}
+                  {client?.fingerprintRegisteredAt && (
+                    <div className="flex justify-between">
+                      <span>Registrada</span>
+                      <span className="font-medium text-foreground">{formatDateTime(client.fingerprintRegisteredAt)}</span>
+                    </div>
+                  )}
+                  {client?.fingerprintId && (
+                    <div className="flex justify-between gap-4">
+                      <span className="shrink-0">ID</span>
+                      <span className="font-mono text-xs text-right break-all text-foreground">{client.fingerprintId}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="economic" className="space-y-4">
