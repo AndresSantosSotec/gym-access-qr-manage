@@ -299,6 +299,15 @@ export function ClientDetail() {
     if (!client) return;
 
     try {
+      // Si el cliente ya tiene huella, eliminarla primero (evitar 422)
+      if (client.fingerprintId) {
+        try {
+          await clientsService.removeFingerprint(client.id);
+        } catch (rmErr) {
+          console.warn('No se pudo eliminar huella previa (se reintenta registro):', rmErr);
+        }
+      }
+
       const result = await clientsService.registerFingerprint(client.id, payload);
 
       const fingerprintId = result.fingerprint_id || `FP-${client.id}-${Date.now()}`;
@@ -309,9 +318,12 @@ export function ClientDetail() {
       setClient({ ...client, fingerprintId, fingerprintRegisteredAt: registeredAt });
       setIsFingerprintDialogOpen(false);
       toast.success('Huella digital registrada exitosamente');
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error('Error al registrar la huella digital');
+      const serverMsg = error?.response?.data?.message
+        || error?.response?.data?.errors && Object.values(error.response.data.errors).flat().join(', ')
+        || 'Error al registrar la huella digital';
+      toast.error(serverMsg, { duration: 6000 });
     }
   };
 
@@ -333,9 +345,10 @@ export function ClientDetail() {
       setFpVerifyResult(null);
       setIsRemoveFingerprintOpen(false);
       toast.success('Huella eliminada');
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error('Error al eliminar la huella');
+      const serverMsg = error?.response?.data?.message || 'Error al eliminar la huella';
+      toast.error(serverMsg, { duration: 6000 });
     }
   };
 
