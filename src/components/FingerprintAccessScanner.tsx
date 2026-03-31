@@ -42,6 +42,8 @@ interface IdentifyResult {
   gap?: number;
   quality_score?: number;
   blur_score?: number;
+  winning_fingerprint_id?: string | null;
+  client_score_mode?: string;
   confirm_window_sec?: number;
   candidate_name?: string;
   client?: {
@@ -291,6 +293,7 @@ export function FingerprintAccessScanner({ open, onClose }: Props) {
                 dec={result.status} reason={result.decision_reason ?? '-'} sim={result.similarity_pct ?? '-'}%
                 {' '}best={result.best_score ?? '-'} second={result.second_best_score ?? '-'} gap={result.gap ?? '-'}
                 {' '}q={result.quality_score ?? '-'} blur={result.blur_score ?? '-'}
+                {' '}win_fp={result.winning_fingerprint_id ?? '-'} mode={result.client_score_mode ?? '-'}
               </div>
             )}
           </div>

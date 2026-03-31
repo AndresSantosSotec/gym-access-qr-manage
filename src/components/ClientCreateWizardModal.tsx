@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { WebcamCaptureModal } from './WebcamCaptureModal';
 import { FingerprintCaptureModal } from './FingerprintCaptureModal';
+import type { FingerprintEnrollmentPayload } from '@/types/fingerprint-enrollment';
 import { clientsService } from '@/services/clients.service';
 import { membershipsService } from '@/services/memberships.service';
 import { paymentsService } from '@/services/payments.service';
@@ -148,8 +149,7 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans, initi
   const [isWebcamOpen, setIsWebcamOpen] = useState(false);
   const [isFingerprintModalOpen, setIsFingerprintModalOpen] = useState(false);
   const [fingerprintId, setFingerprintId] = useState<string>('');
-  const [fingerprintBase64, setFingerprintBase64] = useState<string>('');
-  const [fingerprintAllTemplates, setFingerprintAllTemplates] = useState<string[]>([]);
+  const [fingerprintEnrollment, setFingerprintEnrollment] = useState<FingerprintEnrollmentPayload | null>(null);
   const [fingerprintRegisteredAt, setFingerprintRegisteredAt] = useState<string>('');
 
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
@@ -335,18 +335,18 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans, initi
     setProfilePhoto('');
   };
 
-  const handleRegisterFingerprint = (base64: string, allTemplates: string[]) => {
+  const handleRegisterFingerprint = (payload: FingerprintEnrollmentPayload) => {
     const fpId = `FP-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     setFingerprintId(fpId);
-    setFingerprintBase64(base64);
-    setFingerprintAllTemplates(allTemplates);
+    setFingerprintEnrollment(payload);
     setFingerprintRegisteredAt(new Date().toISOString());
     setIsFingerprintModalOpen(false);
-    toast.success('Huella capturada temporalmente');
+    toast.success('Huella capturada temporalmente (6 muestras)');
   };
 
   const handleRemoveFingerprint = () => {
     setFingerprintId('');
+    setFingerprintEnrollment(null);
     setFingerprintRegisteredAt('');
     toast.info('Huella eliminada');
   };
@@ -471,9 +471,9 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans, initi
         // DO NOT send status field to avoid validation errors
       });
 
-      if (fingerprintBase64) {
+      if (fingerprintEnrollment) {
         try {
-          await clientsService.registerFingerprint(newClient.id, fingerprintBase64, fingerprintAllTemplates);
+          await clientsService.registerFingerprint(newClient.id, fingerprintEnrollment);
           toast.success('Huella registrada en el servidor');
         } catch (fpError) {
           console.error('Error registering fingerprint', fpError);

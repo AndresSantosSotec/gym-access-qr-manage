@@ -28,6 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { WebcamCaptureModal } from '@/components/WebcamCaptureModal';
 import { FingerprintCaptureModal } from '@/components/FingerprintCaptureModal';
+import type { FingerprintEnrollmentPayload } from '@/types/fingerprint-enrollment';
 import { clientsService } from '@/services/clients.service';
 import { membershipsService } from '@/services/memberships.service';
 import { accessService } from '@/services/access.service';
@@ -294,11 +295,11 @@ export function ClientDetail() {
     }
   };
 
-  const handleRegisterFingerprint = async (base64: string, allTemplates: string[]) => {
+  const handleRegisterFingerprint = async (payload: FingerprintEnrollmentPayload) => {
     if (!client) return;
 
     try {
-      const result = await clientsService.registerFingerprint(client.id, base64, allTemplates);
+      const result = await clientsService.registerFingerprint(client.id, payload);
 
       const fingerprintId = result.fingerprint_id || `FP-${client.id}-${Date.now()}`;
       const registeredAt = result.registered_at || new Date().toISOString();

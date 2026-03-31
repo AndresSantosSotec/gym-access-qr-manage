@@ -6,6 +6,8 @@ export interface FingerprintSample {
   imageDataUrl: string;
   /** Raw base64 without the data-URL prefix — what the backend expects */
   imageBase64: string;
+  /** Último código de calidad del SDK al momento de la muestra (si aplica) */
+  qualityCode?: number | null;
 }
 
 export function useFingerprint(onSample?: (s: FingerprintSample) => void) {
@@ -20,6 +22,8 @@ export function useFingerprint(onSample?: (s: FingerprintSample) => void) {
   const [status, setStatus]               = useState('Inicializando SDK...');
   const [qualityText, setQualityText]     = useState('');
   const [isCapturing, setIsCapturing]     = useState(false);
+  /** Último código numérico de calidad del SDK (0 = buena). Actualizado en onQualityReported. */
+  const qualityCodeRef = useRef<number | null>(null);
 
   // Mirrors exactly what the vanilla example does in window.onload
   useEffect(() => {
@@ -59,7 +63,11 @@ export function useFingerprint(onSample?: (s: FingerprintSample) => void) {
         for (const sample of samples) {
           const imageBase64  = fp.b64UrlTo64(sample);
           const imageDataUrl = 'data:image/png;base64,' + imageBase64;
-          onSampleRef.current?.({ imageDataUrl, imageBase64 });
+          onSampleRef.current?.({
+            imageDataUrl,
+            imageBase64,
+            qualityCode: qualityCodeRef.current,
+          });
         }
       } catch (e: unknown) {
         setStatus('Error procesando muestra: ' + (e instanceof Error ? e.message : String(e)));
@@ -68,6 +76,7 @@ export function useFingerprint(onSample?: (s: FingerprintSample) => void) {
 
     // Mirrors: document.getElementById("qualityInputBox").value = Fingerprint.QualityCode[(e.quality)]
     sdk.onQualityReported = (e) => {
+      qualityCodeRef.current = e.quality;
       setQualityText(fp.QualityCode?.[e.quality] ?? String(e.quality));
     };
 
@@ -139,7 +148,18 @@ export function useFingerprint(onSample?: (s: FingerprintSample) => void) {
       });
   }, []);
 
-  return { sdkReady, readers, selectedReader, setSelectedReader, status, qualityText, isCapturing, startCapture, stopCapture, refreshReaders };
+  return {
+    sdkReady,
+    readers,
+    selectedReader,
+    setSelectedReader,
+    status,
+    qualityText,
+    isCapturing,
+    startCapture,
+    stopCapture,
+    refreshReaders,
+  };
 }
 
 

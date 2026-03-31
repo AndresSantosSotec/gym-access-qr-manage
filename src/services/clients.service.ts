@@ -1,5 +1,6 @@
 import { api } from './api.service';
 import type { Client } from '@/types/models';
+import type { FingerprintEnrollmentPayload } from '@/types/fingerprint-enrollment';
 
 /** Construye URL de foto: mismo origen que la app (evita localhost y Mixed Content). */
 function photoPublicUrl(publicPath: string | null | undefined): string | undefined {
@@ -248,21 +249,49 @@ export const clientsService = {
 
   // ─── Fingerprint Methods ───
 
-  registerFingerprint: async (clientId: string, template: string, allTemplates?: string[]): Promise<any> => {
-    const body: Record<string, unknown> = {
-      fingerprint_template: template,
-      device_id: 'websdk',
-      metadata: {
-        source: 'websdk',
-        enrolled_at: new Date().toISOString(),
-        sample_count: allTemplates?.length ?? 1,
-        image_base64: template,
-      },
-    };
-    if (allTemplates && allTemplates.length > 1) {
-      // slice(1): template[0] is already in fingerprint_template — avoid sending it twice
-      body.extra_templates = allTemplates.slice(1);
+  registerFingerprint: async (
+    clientId: string,
+    payloadOrPrimary: FingerprintEnrollmentPayload | string,
+    legacyExtras?: string[],
+  ): Promise<any> => {
+    let body: Record<string, unknown>;
+
+    if (typeof payloadOrPrimary === 'string') {
+      const template = payloadOrPrimary;
+      body = {
+        fingerprint_template: template,
+        device_id: 'websdk',
+        metadata: {
+          source: 'websdk',
+          enrolled_at: new Date().toISOString(),
+          sample_count: legacyExtras?.length ? legacyExtras.length + 1 : 1,
+          image_base64: template,
+        },
+      };
+      if (legacyExtras && legacyExtras.length > 0) {
+        body.extra_templates = legacyExtras.slice(0, 5);
+      }
+    } else {
+      const p = payloadOrPrimary;
+      if (!p.templates || p.templates.length < 6) {
+        throw new Error('Se requieren 6 muestras de huella para el registro guiado.');
+      }
+      body = {
+        fingerprint_template: p.templates[0],
+        extra_templates: p.templates.slice(1, 6),
+        capture_variants: p.captureVariants,
+        quality_samples: p.qualitySamples,
+        captured_at_samples: p.capturedAtSamples,
+        device_id: 'websdk',
+        metadata: {
+          source: 'websdk',
+          enrolled_at: new Date().toISOString(),
+          sample_count: 6,
+          image_base64: p.templates[0],
+        },
+      };
     }
+
     const response = await api.post(`/clients/${clientId}/fingerprint`, body);
     return response.data;
   },
@@ -303,6 +332,8 @@ export const clientsService = {
     gap?: number;
     quality_score?: number;
     blur_score?: number;
+    winning_fingerprint_id?: string | null;
+    client_score_mode?: string;
     confirm_window_sec?: number;
     candidate_name?: string;
     candidate_id?: number;
