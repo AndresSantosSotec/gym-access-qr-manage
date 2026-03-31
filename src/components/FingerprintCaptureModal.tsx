@@ -16,6 +16,16 @@ const REQUIRED_SCANS = 6;
 /** Códigos SDK DigitalPersona > este valor se consideran captura deficiente (rechazar muestra). */
 const MAX_ACCEPTABLE_QUALITY_CODE = 3;
 
+/**
+ * Convierte código de calidad SDK DigitalPersona (0=best, 3=worst aceptable)
+ * a porcentaje 0-100 que espera el backend Laravel.
+ */
+function sdkQualityToPercent(code: number | null): number | null {
+  if (code === null) return null;
+  const map: Record<number, number> = { 0: 95, 1: 75, 2: 55, 3: 40 };
+  return map[code] ?? 30;
+}
+
 const ENROLLMENT_STEPS: { title: string; instruction: string; variant: (typeof ENROLLMENT_CAPTURE_VARIANTS)[number] }[] = [
   { title: 'Centrado, presión normal', instruction: 'Coloca la yema centrada sobre el sensor. Presión firme y uniforme.', variant: 'center_normal' },
   { title: 'Giro ligero a la izquierda', instruction: 'Mantén el dedo y gira ligeramente el puño hacia la izquierda (sin levantar).', variant: 'rotate_left' },
@@ -151,7 +161,7 @@ export function FingerprintCaptureModal({
     try {
       const compressed = await Promise.all(scans.map((s) => compressImage(s.template)));
       const captureVariants = ENROLLMENT_CAPTURE_VARIANTS.slice(0, REQUIRED_SCANS) as string[];
-      const qualitySamples = scans.map((s) => s.quality ?? null);
+      const qualitySamples = scans.map((s) => sdkQualityToPercent(s.quality));
       const capturedAtSamples = scans.map(() => new Date().toISOString());
       const payload: FingerprintEnrollmentPayload = {
         templates: compressed,
@@ -162,7 +172,7 @@ export function FingerprintCaptureModal({
       onCapture(payload);
     } catch {
       const captureVariants = ENROLLMENT_CAPTURE_VARIANTS.slice(0, REQUIRED_SCANS) as string[];
-      const qualitySamples = scans.map((s) => s.quality ?? null);
+      const qualitySamples = scans.map((s) => sdkQualityToPercent(s.quality));
       onCapture({
         templates: scans.map((s) => s.template),
         captureVariants,
