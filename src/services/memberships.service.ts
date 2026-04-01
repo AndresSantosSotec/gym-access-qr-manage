@@ -193,9 +193,11 @@ export const membershipsService = {
     status?: string;
     overdue?: boolean;
     upcoming?: boolean;
+    per_page?: number;
   }) => {
-    const response = await api.get('/installments', { params });
-    return response.data;
+    const response = await api.get('/installments', { params: { per_page: 500, ...params } });
+    // Handle both paginated { data: [...] } and plain array responses
+    return Array.isArray(response.data) ? response.data : (response.data?.data ?? []);
   },
 
   getInstallmentSummary: async () => {

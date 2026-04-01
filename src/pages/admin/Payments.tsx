@@ -220,16 +220,22 @@ function InstallmentsTab() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [filter]);
 
   const loadData = async () => {
     try {
       setIsLoading(true);
+      // Map UI filter to server-side params to avoid loading all records
+      const filterParams: Parameters<typeof membershipsService.getInstallments>[0] = {};
+      if (filter === 'pending') filterParams.status = 'pending';
+      else if (filter === 'overdue') filterParams.overdue = true;
+      else if (filter === 'paid') filterParams.status = 'paid';
+
       const [installmentsRes, summaryRes] = await Promise.all([
-        membershipsService.getInstallments(),
+        membershipsService.getInstallments(filterParams),
         membershipsService.getInstallmentSummary(),
       ]);
-      setInstallments(installmentsRes);
+      setInstallments(Array.isArray(installmentsRes) ? installmentsRes : []);
       setSummary(summaryRes);
     } catch (e) {
       toast.error('Error al cargar cuotas');
@@ -239,12 +245,9 @@ function InstallmentsTab() {
     }
   };
 
-  const filtered = installments.filter((i) => {
-    if (filter === 'pending') return i.status === 'pending' || i.status === 'partial';
-    if (filter === 'overdue') return i.status === 'overdue' || (i.status !== 'paid' && new Date(i.due_date) < new Date());
-    if (filter === 'paid') return i.status === 'paid';
-    return true;
-  });
+  const filtered = filter === 'pending'
+    ? installments.filter((i) => i.status === 'pending' || i.status === 'partial')
+    : installments;
 
   const openPayDialog = (inst: PaymentInstallment) => {
     setSelectedInstallment(inst);
@@ -307,7 +310,7 @@ function InstallmentsTab() {
 
   // GROUP INSTALLMENTS BY CLIENT
   const clientsMap = new Map();
-  installments.forEach(inst => {
+  filtered.forEach(inst => {
     if (!inst.client) return;
     if (!clientsMap.has(inst.client_id)) {
       clientsMap.set(inst.client_id, {
