@@ -191,6 +191,8 @@ function InstallmentsTab() {
   const [recurrenteCheckoutUrl, setRecurrenteCheckoutUrl] = useState<string | null>(null);
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false);
+  const [clientsPage, setClientsPage] = useState(1);
+  const CLIENTS_PER_PAGE = 10;
 
   const handleWhatsAppAfterPay = async () => {
     if (!lastPayResult) return;
@@ -374,6 +376,11 @@ function InstallmentsTab() {
     if (inst.status !== 'paid' && new Date(inst.due_date) < new Date()) c.overdueCount++;
   });
   const clientsWithInstallments = Array.from(clientsMap.values());
+  const totalClientPages = Math.ceil(clientsWithInstallments.length / CLIENTS_PER_PAGE);
+  const paginatedClients = clientsWithInstallments.slice(
+    (clientsPage - 1) * CLIENTS_PER_PAGE,
+    clientsPage * CLIENTS_PER_PAGE
+  );
 
   if (isLoading) {
     return (
@@ -461,7 +468,7 @@ function InstallmentsTab() {
                   key={f}
                   size="sm"
                   variant={filter === f ? 'default' : 'outline'}
-                  onClick={() => setFilter(f)}
+                  onClick={() => { setFilter(f); setClientsPage(1); }}
                   className={cn(
                     'text-xs',
                     f === 'overdue' && filter === f && 'bg-red-600 hover:bg-red-700',
@@ -488,7 +495,7 @@ function InstallmentsTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {clientsWithInstallments.map((c: any) => {
+                {paginatedClients.map((c: any) => {
                   const hasOverdue = c.overdueCount > 0;
                   return (
                     <TableRow key={c.client.id}>
@@ -542,10 +549,30 @@ function InstallmentsTab() {
               </TableBody>
             </Table>
           </div>
+          {/* Paginación de clientes */}
+          {totalClientPages > 1 && (
+            <div className="flex items-center justify-between gap-4 px-2 py-3 border-t">
+              <span className="text-sm text-muted-foreground">
+                Mostrando {(clientsPage - 1) * CLIENTS_PER_PAGE + 1}–{Math.min(clientsPage * CLIENTS_PER_PAGE, clientsWithInstallments.length)} de {clientsWithInstallments.length} clientes
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline" size="sm" className="h-8 w-8 p-0"
+                  disabled={clientsPage <= 1}
+                  onClick={() => setClientsPage((p) => Math.max(1, p - 1))}
+                >‹</Button>
+                <span className="text-sm">Página {clientsPage} de {totalClientPages}</span>
+                <Button
+                  variant="outline" size="sm" className="h-8 w-8 p-0"
+                  disabled={clientsPage >= totalClientPages}
+                  onClick={() => setClientsPage((p) => Math.min(totalClientPages, p + 1))}
+                >›</Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Modal with Installments for Selected Client */}
       <Dialog open={clientModalOpen} onOpenChange={setClientModalOpen}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>

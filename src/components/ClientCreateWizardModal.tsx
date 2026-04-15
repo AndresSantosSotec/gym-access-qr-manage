@@ -594,6 +594,9 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans, initi
             {step === 1 && (
               <div className="space-y-4">
                 <h3 className="font-bold text-lg">Paso 1: Datos Básicos</h3>
+                <p className="text-xs text-muted-foreground">
+                  Los campos marcados con <span className="text-destructive font-bold">*</span> son obligatorios. El resto son opcionales.
+                </p>
 
                 {/* ── Draft Slots ─────────────────────────────────────────── */}
                 <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
@@ -681,7 +684,7 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans, initi
                   </div>
 
                   <div>
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="email">Email <span className="text-xs text-muted-foreground font-normal">(Opcional)</span></Label>
                     <Input
                       id="email"
                       type="email"
@@ -692,7 +695,7 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans, initi
                   </div>
 
                   <div>
-                    <Label htmlFor="dpi">DPI</Label>
+                    <Label htmlFor="dpi">DPI <span className="text-xs text-muted-foreground font-normal">(Opcional)</span></Label>
                     <Input
                       id="dpi"
                       value={dpi}
@@ -702,7 +705,7 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans, initi
                   </div>
 
                   <div>
-                    <Label htmlFor="nit">NIT <span className="text-muted-foreground text-xs">(Facturación)</span></Label>
+                    <Label htmlFor="nit">NIT <span className="text-muted-foreground text-xs">(Opcional — para facturación electrónica)</span></Label>
                     <Input
                       id="nit"
                       value={nit}
@@ -712,7 +715,7 @@ export function ClientCreateWizardModal({ open, onClose, onSuccess, plans, initi
                   </div>
 
                   <div>
-                    <Label htmlFor="notes">Notas</Label>
+                    <Label htmlFor="notes">Notas <span className="text-xs text-muted-foreground font-normal">(Opcional)</span></Label>
                     <Textarea
                       id="notes"
                       value={notes}
