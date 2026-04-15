@@ -56,6 +56,7 @@ import {
   DeviceMobile,
   FileArrowDown,
 } from '@phosphor-icons/react';
+import { WhatsappLogo } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -184,10 +185,53 @@ function InstallmentsTab() {
     transferDocument: '',
   });
   const [isPaying, setIsPaying] = useState(false);
+  const [lastPayResult, setLastPayResult] = useState<any>(null);
 
   // Recurrente checkout link state
   const [recurrenteCheckoutUrl, setRecurrenteCheckoutUrl] = useState<string | null>(null);
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+  const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false);
+
+  const handleWhatsAppAfterPay = async () => {
+    if (!lastPayResult) return;
+    const { result, installment } = lastPayResult;
+    const receiptId = result?.receipt?.id;
+    if (receiptId) {
+      try {
+        const blob = await receiptsService.downloadReceiptPdf(receiptId);
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${result.receipt.receipt_number || 'recibo'}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } catch {
+        console.warn('No se pudo descargar el PDF del recibo');
+      }
+    }
+    const clientName = installment.client?.full_name || installment.client?.name || 'Cliente';
+    const rawPhone = (installment.client?.phone || '').replace(/\D/g, '');
+    const amount = parseFloat(payForm.amount || '0');
+    const total = `Q${amount.toFixed(2)}`;
+    const date = new Date().toLocaleDateString('es-GT');
+    const message = encodeURIComponent(
+      `🏋 *IronGym - Comprobante de Pago*\n\n` +
+      `👤 Cliente: *${clientName}*\n` +
+      `💰 Monto: *${total}*\n` +
+      `📅 Cuota #${installment.installment_number} — Fecha: ${date}\n` +
+      `✅ Estado: Pagado\n\n` +
+      (receiptId ? `El PDF del recibo se descargó automáticamente. Puedes adjuntarlo.\n\n` : '') +
+      `_Gracias por tu preferencia._`
+    );
+    const phone = rawPhone.startsWith('502') ? rawPhone : rawPhone ? '502' + rawPhone : '';
+    const waUrl = phone
+      ? `https://wa.me/${phone}?text=${message}`
+      : `https://web.whatsapp.com/send?text=${message}`;
+    window.open(waUrl, '_blank');
+    setWhatsAppDialogOpen(false);
+  };
 
   const generateRecurrenteLink = async () => {
     if (!selectedInstallment?.membership?.plan_id && !selectedInstallment?.membership?.membership_plan_id) {
@@ -267,6 +311,7 @@ function InstallmentsTab() {
   const handlePay = async () => {
     if (!selectedInstallment || !payForm.amount) return;
     setIsPaying(true);
+    setLastPayResult(null);
     try {
       const finalReference = payForm.payment_method === 'transfer' && payForm.transferDate
         ? `${payForm.reference} (Fecha: ${payForm.transferDate})`
@@ -281,7 +326,9 @@ function InstallmentsTab() {
         payForm.payment_method === 'transfer' && payForm.transferDocument ? payForm.transferDocument : undefined
       );
       toast.success(result.message || 'Pago registrado exitosamente');
+      setLastPayResult({ result, installment: selectedInstallment });
       setPayDialogOpen(false);
+      setWhatsAppDialogOpen(true);
 
       // We must reload data and also update the selected client's installments
       await loadData();
@@ -768,6 +815,7 @@ function InstallmentsTab() {
               Cancelar
             </Button>
             {payForm.payment_method === 'recurrente' ? (
+
               <Button
                 onClick={() => {
                   toast.success('Membresía se activará automáticamente cuando Recurrente confirme el pago');
@@ -793,6 +841,33 @@ function InstallmentsTab() {
                 Registrar Pago
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* WhatsApp post-pay dialog */}
+      <Dialog open={whatsAppDialogOpen} onOpenChange={setWhatsAppDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <WhatsappLogo className="w-5 h-5 text-green-600" />
+              Pago Registrado
+            </DialogTitle>
+            <DialogDescription>
+              ¿Deseas enviar el comprobante de pago al cliente por WhatsApp?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setWhatsAppDialogOpen(false)}>
+              No, gracias
+            </Button>
+            <Button
+              onClick={handleWhatsAppAfterPay}
+              className="gap-2 bg-green-600 hover:bg-green-700 text-white"
+            >
+              <WhatsappLogo className="w-4 h-4" />
+              Enviar por WhatsApp
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

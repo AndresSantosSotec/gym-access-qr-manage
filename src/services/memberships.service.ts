@@ -195,7 +195,7 @@ export const membershipsService = {
     upcoming?: boolean;
     per_page?: number;
   }) => {
-    const response = await api.get('/installments', { params: { per_page: 500, ...params } });
+    const response = await api.get('/installments', { params: { per_page: 100, ...params } });
     // Handle both paginated { data: [...] } and plain array responses
     return Array.isArray(response.data) ? response.data : (response.data?.data ?? []);
   },

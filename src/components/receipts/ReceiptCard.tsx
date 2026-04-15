@@ -7,6 +7,7 @@ import {
   Printer,
   EnvelopeOpen,
 } from '@phosphor-icons/react';
+import { WhatsappLogo } from '@phosphor-icons/react';
 import { receiptsService, type Receipt } from '@/services/receipts.service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -28,6 +29,46 @@ export function ReceiptCard({
   compact = false 
 }: ReceiptCardProps) {
   const [loading, setLoading] = useState(false);
+
+  const handleWhatsApp = async () => {
+    try {
+      const blob = await receiptsService.downloadReceiptPdf(receipt.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${receipt.receipt_number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch {
+      console.warn('Error descargando PDF para WhatsApp');
+    }
+    const clientName = (receipt as any).client?.full_name || (receipt as any).client?.name || 'Cliente';
+    const rawPhone = ((receipt as any).client?.phone || '').replace(/\D/g, '');
+    const total = `Q${Number(receipt.total || 0).toFixed(2)}`;
+    const date = new Date(receipt.created_at).toLocaleDateString('es-GT');
+    const typeLabel = receipt.payment_type === 'subscription' ? 'Membresía'
+      : receipt.payment_type === 'individual_payment' ? 'Pago'
+      : receipt.payment_type === 'product' ? 'Venta/POS' : 'Pago';
+    const message = encodeURIComponent(
+      `🏋 *IronGym - Comprobante de Pago*\n\n` +
+      `📄 Recibo: *${receipt.receipt_number}*\n` +
+      `👤 Cliente: *${clientName}*\n` +
+      `💰 Total: *${total}*\n` +
+      `📋 Tipo: ${typeLabel}\n` +
+      `📅 Fecha: ${date}\n` +
+      `✅ Estado: ${receipt.status === 'paid' ? 'Pagado' : 'Pendiente'}\n\n` +
+      `El PDF del recibo se descargó automáticamente. Puedes adjuntarlo a este chat.\n\n` +
+      `_Gracias por tu preferencia._`
+    );
+    const phone = rawPhone.startsWith('502') ? rawPhone : rawPhone ? '502' + rawPhone : '';
+    const waUrl = phone
+      ? `https://wa.me/${phone}?text=${message}`
+      : `https://web.whatsapp.com/send?text=${message}`;
+    window.open(waUrl, '_blank');
+    toast.success('PDF descargado. WhatsApp abierto para enviar.');
+  };
 
   const handleDownload = async () => {
     try {
@@ -93,7 +134,16 @@ export function ReceiptCard({
         >
           <Download className="w-4 h-4" />
         </Button>
-      </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleWhatsApp}
+          disabled={loading}
+          className="h-7 w-7 p-0 text-green-600 hover:text-green-700"
+          title="Enviar por WhatsApp"
+        >
+          <WhatsappLogo className="w-4 h-4" />
+        </Button>
     );
   }
 
@@ -150,6 +200,16 @@ export function ReceiptCard({
         >
           <Eye className="w-4 h-4 mr-1" />
           Ver
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleWhatsApp}
+          disabled={loading}
+          className="flex-1 text-green-600 border-green-300 hover:bg-green-50"
+        >
+          <WhatsappLogo className="w-4 h-4 mr-1" />
+          WhatsApp
         </Button>
       </div>
 
