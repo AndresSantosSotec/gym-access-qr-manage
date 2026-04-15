@@ -1185,6 +1185,50 @@ function PaymentsHistoryTab() {
     }
   };
 
+  const handleWhatsAppPayment = async (p: any) => {
+    // Try to get/create receipt to download PDF
+    try {
+      const result = await getOrCreateReceiptForPayment(p);
+      if (result?.receipt?.id) {
+        const blob = await receiptsService.downloadReceiptPdf(result.receipt.id);
+        if (blob instanceof Blob && blob.size > 0) {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `recibo-${result.receipt.receipt_number ?? p.id}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }
+      }
+    } catch {
+      console.warn('No se pudo descargar PDF para WhatsApp');
+    }
+    const clientName = p.client?.full_name || p.client?.name || 'Cliente';
+    const rawPhone = (p.client?.phone || '').replace(/\D/g, '');
+    const total = `Q${Number(p.amount || 0).toFixed(2)}`;
+    const date = p.paid_at ? new Date(p.paid_at).toLocaleDateString('es-GT') : new Date().toLocaleDateString('es-GT');
+    const methodMap: Record<string, string> = { cash: 'Efectivo', card: 'Tarjeta', transfer: 'Transferencia', stripe: 'Stripe' };
+    const method = methodMap[p.payment_method?.toLowerCase()] || p.payment_method || 'Pago';
+    const message = encodeURIComponent(
+      `\uD83C\uDFCB *IronGym - Comprobante de Pago*\n\n` +
+      `\uD83D\uDC64 Cliente: *${clientName}*\n` +
+      `\uD83D\uDCB0 Monto: *${total}*\n` +
+      `\uD83D\uDCB3 Método: ${method}\n` +
+      `\uD83D\uDCC5 Fecha: ${date}\n` +
+      `\u2705 Estado: Completado\n\n` +
+      `El PDF del recibo se descargó automáticamente. Puedes adjuntarlo a este chat.\n\n` +
+      `_Gracias por tu preferencia._`
+    );
+    const phone = rawPhone.startsWith('502') ? rawPhone : rawPhone ? '502' + rawPhone : '';
+    const waUrl = phone
+      ? `https://wa.me/${phone}?text=${message}`
+      : `https://web.whatsapp.com/send?text=${message}`;
+    window.open(waUrl, '_blank');
+    toast.success('PDF descargado. WhatsApp abierto para enviar.');
+  };
+
   const handleSaveClientNit = async () => {
     if (!emailDialogData?.clientId || !nitInputValue.trim()) return;
     setSavingNit(true);
@@ -1548,6 +1592,16 @@ function PaymentsHistoryTab() {
                           >
                             <Envelope size={14} />
                             Correo
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 text-green-600 border-green-300 hover:bg-green-50"
+                            onClick={() => handleWhatsAppPayment(p)}
+                            title="Enviar comprobante por WhatsApp"
+                          >
+                            <WhatsappLogo size={14} />
+                            WhatsApp
                           </Button>
                           {can('ROLES_MANAGE') && (
                             <Button
