@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CheckCircle, Funnel, MagnifyingGlass, XCircle } from '@phosphor-icons/react';
 import { accessService } from '@/services/access.service';
@@ -19,15 +19,24 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 
+/** Rango por defecto: últimos 30 días (antes solo "hoy", la tabla salía vacía sin actividad el día actual). */
+const defaultDateRange = () => {
+  const end = new Date();
+  return {
+    to: end.toISOString().slice(0, 10),
+    from: format(subDays(end, 30), 'yyyy-MM-dd'),
+  };
+};
+
 export function Checkins() {
-  const today = new Date().toISOString().slice(0, 10);
+  const { from: defaultFrom, to: defaultTo } = defaultDateRange();
   const [logs, setLogs] = useState<AccessLogRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<'all' | 'allowed' | 'denied'>('all');
   const [method, setMethod] = useState<'all' | 'qr' | 'fingerprint'>('all');
-  const [dateFrom, setDateFrom] = useState(today);
-  const [dateTo, setDateTo] = useState(today);
+  const [dateFrom, setDateFrom] = useState(defaultFrom);
+  const [dateTo, setDateTo] = useState(defaultTo);
   const [page, setPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -78,18 +87,19 @@ export function Checkins() {
   };
 
   const handleClearFilters = () => {
+    const { from, to } = defaultDateRange();
     setSearch('');
     setStatus('all');
     setMethod('all');
-    setDateFrom(today);
-    setDateTo(today);
+    setDateFrom(from);
+    setDateTo(to);
     setPage(1);
     loadLogs({
       search: undefined,
       status: undefined,
       verification_method: undefined,
-      date_from: today,
-      date_to: today,
+      date_from: from,
+      date_to: to,
       page: 1,
       per_page: 15,
     });
@@ -105,7 +115,8 @@ export function Checkins() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Check-ins</h1>
         <p className="text-muted-foreground mt-1">
-          Consulta ingresos al gimnasio por fecha, estado y método de verificación.
+          Consulta ingresos al gimnasio por fecha, estado y método de verificación. Por defecto se listan los{' '}
+          <strong className="font-medium text-foreground">últimos 30 días</strong>; si no ves datos, amplía las fechas.
         </p>
       </div>
 
@@ -244,7 +255,8 @@ export function Checkins() {
                   {!logs.length && (
                     <TableRow>
                       <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
-                        No hay check-ins que coincidan con los filtros actuales.
+                        No hay check-ins que coincidan con los filtros actuales. Prueba un rango de fechas más amplio
+                        o quita el filtro de método (QR / huella).
                       </TableCell>
                     </TableRow>
                   )}

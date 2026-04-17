@@ -202,6 +202,26 @@ export function SalesHistory() {
         }
     };
 
+    const handleUploadDocument = async (pagoId: number, e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+            const base64 = reader.result as string;
+            try {
+                await commercialService.uploadPaymentDocument(pagoId, base64);
+                toast.success('Comprobante cargado correctamente');
+                if (selectedSale) {
+                    handleShowDetails(selectedSale);
+                }
+            } catch (error) {
+                toast.error('Error al cargar comprobante');
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+
     const filteredSales = sales.filter(s =>
         s.id.toString().includes(searchTerm) ||
         s.cliente?.nombre.toLowerCase().includes(searchTerm.toLowerCase())
@@ -359,7 +379,7 @@ export function SalesHistory() {
                                         <div key={item.product_id} className="flex items-center justify-between rounded-lg border px-4 py-3 gap-4">
                                             <div>
                                                 <p className="font-medium">{item.name}</p>
-                                                <p className="text-xs text-muted-foreground">{item.quantity} unidades</p>
+                                                <p className="text-xs text-muted-foreground">{item.top_items_count || item.quantity} unidades</p>
                                             </div>
                                             <span className="font-black">Q{Number(item.amount).toFixed(2)}</span>
                                         </div>
@@ -679,17 +699,57 @@ export function SalesHistory() {
                                 <div className="pt-4 border-t">
                                     <p className="text-muted-foreground font-semibold uppercase text-[10px] mb-2">Historial de Pagos</p>
                                     <div className="flex gap-4 flex-wrap">
-                                        {selectedSale.pagos.map(p => (
-                                            <div key={p.id} className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center">
-                                                    <CheckCircle weight="bold" />
+                                        {selectedSale.pagos.map(p => {
+                                            const isTransfer = p.metodo_pago?.nombre.toLowerCase().includes('transferencia') ||
+                                                             p.metodo_pago?.nombre.toLowerCase().includes('depósito');
+                                            return (
+                                                <div key={p.id} className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 flex items-center justify-between gap-3 min-w-[220px]">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center">
+                                                            <CheckCircle weight="bold" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-bold text-green-700">{p.metodo_pago?.nombre}</p>
+                                                            <p className="text-lg font-black text-green-900">Q{Number(p.monto).toFixed(2)}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-1">
+                                                        {p.document_url ? (
+                                                            <Button
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                className="h-8 w-8 text-green-700 hover:bg-green-100"
+                                                                onClick={() => window.open(p.document_url, '_blank')}
+                                                                title="Ver comprobante"
+                                                            >
+                                                                <Eye size={18} />
+                                                            </Button>
+                                                        ) : (
+                                                            isTransfer && (
+                                                                <div className="relative">
+                                                                    <Button
+                                                                        size="icon"
+                                                                        variant="ghost"
+                                                                        className="h-8 w-8 text-amber-700 hover:bg-amber-100"
+                                                                        title="Cargar comprobante"
+                                                                        onClick={() => document.getElementById(`upload-${p.id}`)?.click()}
+                                                                    >
+                                                                        <Plus size={18} />
+                                                                    </Button>
+                                                                    <input
+                                                                        id={`upload-${p.id}`}
+                                                                        type="file"
+                                                                        className="hidden"
+                                                                        onChange={(e) => handleUploadDocument(p.id, e)}
+                                                                        accept="image/*,application/pdf"
+                                                                    />
+                                                                </div>
+                                                            )
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <p className="text-xs font-bold text-green-700">{p.metodo_pago?.nombre}</p>
-                                                    <p className="text-lg font-black text-green-900">Q{Number(p.monto).toFixed(2)}</p>
-                                                </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}

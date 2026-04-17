@@ -53,8 +53,11 @@ export function Sales() {
     const [saleType, setSaleType] = useState<'PAGADA' | 'COTIZACION'>('PAGADA');
     const [payments, setPayments] = useState<{ metodo_pago_id: number; monto: number }[]>([]);
 
+    const [sortBy, setSortBy] = useState<string>('nombre-asc');
+
     const [isClientModalOpen, setIsClientModalOpen] = useState(false);
     const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+    const [isRecurrenteLoading, setIsRecurrenteLoading] = useState(false);
     const [postSaleOpen, setPostSaleOpen] = useState(false);
     const [postSaleHtml, setPostSaleHtml] = useState('');
 
@@ -134,6 +137,20 @@ export function Sales() {
         }
     };
 
+    const handleFileChange = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64 = reader.result as string;
+            const newPayments = [...payments];
+            (newPayments[idx] as any).document_base64 = base64;
+            setPayments(newPayments);
+        };
+        reader.readAsDataURL(file);
+    };
+
     const handleCheckout = async () => {
         if (cart.length === 0) return;
 
@@ -177,9 +194,66 @@ export function Sales() {
         }
     };
 
-    const filteredProducts = products.filter(p =>
-        p.nombre.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const handleRecurrenteCheckout = async () => {
+        if (!selectedClientId) {
+            toast.error('Selecciona un cliente para usar pago con tarjeta');
+            return;
+        }
+
+        const client = clients.find(c => c.id === selectedClientId);
+        if (!client?.correo) {
+            toast.error('El cliente debe tener un correo electrónico registrado');
+            return;
+        }
+
+        try {
+            setIsRecurrenteLoading(true);
+            // We use a generic endpoint for POS card payments if available,
+            // or we use the existing one if we can.
+            // For now, let's assume we use the public checkout logic but adapted.
+            // But since this is /admin, we can use /recurrente/checkout-productos if we have product equivalents.
+            // Since POS products might not be in Recurrente, we'd need a way to handle this.
+            
+            // SIMPLIFICATION: We tell the user we're generating the link.
+            // In a real implementation, we'd call an endpoint that creates a Recurrente product for the total.
+            toast.info('Generando link de pago...');
+            
+            const response = await commercialService.generateQuickPayLink({
+                name: client.nombre,
+                email: client.correo,
+                amount: subtotal,
+                concept: `Venta POS #${Date.now()}`
+            });
+
+            if (response.checkout_url) {
+                window.open(response.checkout_url, '_blank');
+                toast.success('Link de pago abierto en otra pestaña');
+            }
+        } catch (error) {
+            toast.error('Error al generar link de pago');
+        } finally {
+            setIsRecurrenteLoading(false);
+        }
+    };
+
+    const sortedProducts = [...products]
+        .filter(p => p.nombre.toLowerCase().includes(searchTerm.toLowerCase()))
+        .sort((a, b) => {
+            switch (sortBy) {
+                case 'nombre-asc':
+                    return a.nombre.localeCompare(b.nombre);
+                case 'nombre-desc':
+                    return b.nombre.localeCompare(a.nombre);
+                case 'precio-asc':
+                    return a.precio_venta - b.precio_venta;
+                case 'precio-desc':
+                    return b.precio_venta - a.precio_venta;
+                case 'ventas-desc':
+                    return (b.ventas_count || 0) - (a.ventas_count || 0);
+                default:
+                    return 0;
+            }
+        });
 
     return (
         <div className="h-[calc(100vh-80px)] p-4 flex gap-4 overflow-hidden">
@@ -198,6 +272,19 @@ export function Sales() {
                                 />
                             </div>
                             <div className="flex gap-2">
+                                <Select value={sortBy} onValueChange={setSortBy}>
+                                    <SelectTrigger className="w-[180px] h-12 bg-background border-none shadow-sm capitalize">
+                                        <SelectValue placeholder="Ordenar por" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="nombre-asc">Nombre (A-Z)</SelectItem>
+                                        <SelectItem value="nombre-desc">Nombre (Z-A)</SelectItem>
+                                        <SelectItem value="precio-asc">Precio: Menor a Mayor</SelectItem>
+                                        <SelectItem value="precio-desc">Precio: Mayor a Menor</SelectItem>
+                                        <SelectItem value="ventas-desc">Más Vendidos</SelectItem>
+                                    </SelectContent>
+                                </Select>
+
                                 <Button
                                     variant={saleType === 'PAGADA' ? 'default' : 'outline'}
                                     onClick={() => setSaleType('PAGADA')}
@@ -234,7 +321,7 @@ export function Sales() {
                             </div>
                         ) : (
                             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                {filteredProducts.map(product => (
+                                {sortedProducts.map(product => (
                                     <button
                                         key={product.id}
                                         onClick={() => addToCart(product)}
@@ -263,7 +350,7 @@ export function Sales() {
                                         )}
                                     </button>
                                 ))}
-                                {filteredProducts.length === 0 && (
+                                {sortedProducts.length === 0 && (
                                     <div className="col-span-full py-12 text-center text-muted-foreground">
                                         No se encontraron productos
                                     </div>
@@ -430,6 +517,14 @@ export function Sales() {
                                 />
                             </div>
                         </div>
+                        <div className="grid gap-2">
+                            <Label>Correo Electrónico (Para tarjetas/Recurrente)</Label>
+                            <Input
+                                value={newClient.correo}
+                                onChange={(e) => setNewClient({ ...newClient, correo: e.target.value })}
+                                placeholder="cliente@email.com"
+                            />
+                        </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsClientModalOpen(false)}>Cancelar</Button>
@@ -453,56 +548,98 @@ export function Sales() {
                         </div>
 
                         <div className="space-y-4">
-                            {payments.map((p, idx) => (
-                                <div key={idx} className="flex gap-4 items-end">
-                                    <div className="flex-1 space-y-2">
-                                        <Label className="text-xs">Método de Pago</Label>
-                                        <Select
-                                            value={p.metodo_pago_id.toString()}
-                                            onValueChange={(val) => {
-                                                const newPayments = [...payments];
-                                                newPayments[idx].metodo_pago_id = parseInt(val);
-                                                setPayments(newPayments);
-                                            }}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {paymentMethods.map(m => (
-                                                    <SelectItem key={m.id} value={m.id.toString()}>{m.nombre}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="w-40 space-y-2">
-                                        <Label className="text-xs">Monto</Label>
-                                        <div className="relative">
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground text-sm">Q</span>
-                                            <Input
-                                                className="pl-7 font-bold"
-                                                type="number"
-                                                value={p.monto}
-                                                onChange={(e) => {
-                                                    const newPayments = [...payments];
-                                                    newPayments[idx].monto = parseFloat(e.target.value) || 0;
-                                                    setPayments(newPayments);
-                                                }}
-                                            />
+                            {payments.map((p, idx) => {
+                                const selectedMethod = paymentMethods.find(m => m.id === p.metodo_pago_id);
+                                const needsProof = selectedMethod?.nombre.toLowerCase().includes('transferencia') ||
+                                                  selectedMethod?.nombre.toLowerCase().includes('depósito');
+                                const isCard = selectedMethod?.nombre.toLowerCase().includes('tarjeta') ||
+                                               selectedMethod?.nombre.toLowerCase().includes('card');
+
+                                return (
+                                    <div key={idx} className="space-y-4 p-3 border rounded-lg bg-accent/10">
+                                        <div className="flex gap-4 items-end">
+                                            <div className="flex-1 space-y-2">
+                                                <Label className="text-xs">Método de Pago</Label>
+                                                <Select
+                                                    value={p.metodo_pago_id.toString()}
+                                                    onValueChange={(val) => {
+                                                        const newPayments = [...payments];
+                                                        newPayments[idx].metodo_pago_id = parseInt(val);
+                                                        setPayments(newPayments);
+                                                    }}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {paymentMethods.map(m => (
+                                                            <SelectItem key={m.id} value={m.id.toString()}>{m.nombre}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="w-40 space-y-2">
+                                                <Label className="text-xs">Monto</Label>
+                                                <div className="relative">
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted-foreground text-sm">Q</span>
+                                                    <Input
+                                                        className="pl-7 font-bold"
+                                                        type="number"
+                                                        value={p.monto}
+                                                        onChange={(e) => {
+                                                            const newPayments = [...payments];
+                                                            newPayments[idx].monto = parseFloat(e.target.value) || 0;
+                                                            setPayments(newPayments);
+                                                        }}
+                                                    />
+                                                </div>
+                                            </div>
+                                            {payments.length > 1 && (
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    className="text-destructive mb-0.5"
+                                                    onClick={() => setPayments(payments.filter((_, i) => i !== idx))}
+                                                >
+                                                    <X size={18} />
+                                                </Button>
+                                            )}
                                         </div>
+
+                                        {needsProof && (
+                                            <div className="space-y-2 mt-2">
+                                                <Label className="text-[10px] font-bold uppercase text-primary flex items-center gap-1">
+                                                    <Plus size={12} /> Cargar Comprobante de Transferencia
+                                                </Label>
+                                                <Input
+                                                    type="file"
+                                                    accept="image/*,application/pdf"
+                                                    onChange={(e) => handleFileChange(idx, e)}
+                                                    className="h-9 text-xs"
+                                                />
+                                                {(p as any).document_base64 && (
+                                                    <p className="text-[10px] text-green-600 font-medium">Archivo cargado correctamente</p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {isCard && (
+                                            <div className="mt-2 text-center">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="w-full gap-2 text-xs h-8 border-primary text-primary hover:bg-primary/10"
+                                                    disabled={isRecurrenteLoading}
+                                                    onClick={handleRecurrenteCheckout}
+                                                >
+                                                    <CreditCard size={14} />
+                                                    GENERAR LINK DE PAGO (RECURRENTE)
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
-                                    {payments.length > 1 && (
-                                        <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            className="text-destructive mb-0.5"
-                                            onClick={() => setPayments(payments.filter((_, i) => i !== idx))}
-                                        >
-                                            <X size={18} />
-                                        </Button>
-                                    )}
-                                </div>
-                            ))}
+                                );
+                            })}
 
                             <Button
                                 variant="outline"

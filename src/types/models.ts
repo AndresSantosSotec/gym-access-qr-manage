@@ -422,6 +422,7 @@ export interface Producto {
   precio_compra: number;
   precio_venta: number;
   stock: number;
+  ventas_count?: number;
   image_url?: string;
   created_at?: string;
   updated_at?: string;
@@ -512,4 +513,5 @@ export interface PagoVenta {
   metodo_pago_id: number;
   metodo_pago?: MetodoPago;
   monto: number;
+  document_url?: string;
 }

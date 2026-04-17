@@ -918,7 +918,10 @@ function PaymentsHistoryTab() {
     payment_method: 'cash',
     transaction_id: '',
     notes: '',
+    document_base64: '',
   });
+  const [newPaymentRecurrenteUrl, setNewPaymentRecurrenteUrl] = useState<string | null>(null);
+  const [isGeneratingNewPaymentLink, setIsGeneratingNewPaymentLink] = useState(false);
   const [deletingPaymentId, setDeletingPaymentId] = useState<number | null>(null);
 
   // Enviar comprobante por correo
@@ -1109,6 +1112,7 @@ function PaymentsHistoryTab() {
         payment_method: newPaymentForm.payment_method,
         transaction_id: newPaymentForm.transaction_id || undefined,
         notes: newPaymentForm.notes || undefined,
+        document_base64: newPaymentForm.document_base64 || undefined,
         status: 'completed',
       });
 
@@ -1130,7 +1134,9 @@ function PaymentsHistoryTab() {
         payment_method: 'cash',
         transaction_id: '',
         notes: '',
+        document_base64: '',
       });
+      setNewPaymentRecurrenteUrl(null);
       loadPayments();
     } catch (e: any) {
       toast.error(e.response?.data?.message || 'Error al crear pago');
@@ -1792,10 +1798,75 @@ function PaymentsHistoryTab() {
                   <SelectItem value="cash">Efectivo</SelectItem>
                   <SelectItem value="card">Tarjeta</SelectItem>
                   <SelectItem value="transfer">Transferencia</SelectItem>
+                  <SelectItem value="recurrente">Tarjeta (Recurrente)</SelectItem>
                   <SelectItem value="stripe">Stripe</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {newPaymentForm.payment_method === 'transfer' && (
+              <div className="space-y-2 p-3 border rounded bg-muted/20">
+                <Label>Comprobante de Transferencia</Label>
+                <Input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => setNewPaymentForm({ ...newPaymentForm, document_base64: reader.result as string });
+                    reader.readAsDataURL(file);
+                  }}
+                />
+                {newPaymentForm.document_base64 && (
+                  <p className="text-[10px] text-green-600 font-medium flex items-center gap-1">
+                    <Check size={12} /> Archivo cargado
+                  </p>
+                )}
+              </div>
+            )}
+
+            {newPaymentForm.payment_method === 'recurrente' && (
+              <div className="p-3 border rounded bg-blue-50 dark:bg-blue-950 border-blue-200">
+                <p className="text-xs text-blue-700 mb-2">Genera un link de pago para que el cliente pague con su tarjeta.</p>
+                {!newPaymentRecurrenteUrl ? (
+                  <Button
+                    size="sm"
+                    className="w-full bg-blue-600 hover:bg-blue-700"
+                    disabled={isGeneratingNewPaymentLink || !newPaymentForm.amount || !newPaymentForm.client_id}
+                    onClick={async () => {
+                      setIsGeneratingNewPaymentLink(true);
+                      try {
+                        const client = clients.find(c => String(c.id) === newPaymentForm.client_id);
+                        if (!client?.email) {
+                           toast.error('El cliente no tiene correo electrónico');
+                           return;
+                        }
+                        const { data } = await api.post('/public/quick-pay', {
+                          name: `${client.first_name} ${client.last_name}`,
+                          email: client.email,
+                          amount: parseFloat(newPaymentForm.amount),
+                          concept: `Pago Manual - ${client.first_name}`
+                        });
+                        setNewPaymentRecurrenteUrl(data.checkout_url);
+                        window.open(data.checkout_url, '_blank');
+                      } catch (err) {
+                        toast.error('Error al generar link');
+                      } finally {
+                        setIsGeneratingNewPaymentLink(false);
+                      }
+                    }}
+                  >
+                    {isGeneratingNewPaymentLink ? 'Generando...' : 'Generar Link de Pago'}
+                  </Button>
+                ) : (
+                   <div className="flex gap-2">
+                     <Button size="sm" variant="outline" className="flex-1" onClick={() => window.open(newPaymentRecurrenteUrl, '_blank')}>Abrir Link</Button>
+                     <Button size="sm" variant="ghost" onClick={() => setNewPaymentRecurrenteUrl(null)}>Regenerar</Button>
+                   </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>Referencia (opcional)</Label>

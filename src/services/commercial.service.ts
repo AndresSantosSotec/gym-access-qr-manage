@@ -21,6 +21,19 @@ function mapProductFromApi(product: any): Producto {
     };
 }
 
+// Helper para procesar URLs de documentos de pago
+function mapVentaFromApi(venta: any): Venta {
+    return {
+        ...venta,
+        pagos: venta.pagos?.map((p: any) => ({
+            ...p,
+            document_url: p.document_url && !p.document_url.startsWith('http')
+                ? buildStorageUrl(p.document_url)
+                : p.document_url
+        }))
+    };
+}
+
 export const commercialService = {
     // Lookups
     getLookups: async () => {
@@ -59,19 +72,22 @@ export const commercialService = {
     // Ventas
     getSales: async (estado?: string) => {
         const response = await api.get<Venta[]>('/ventas', { params: { estado } });
-        return response.data;
+        return response.data.map(mapVentaFromApi);
     },
     createSale: async (data: any) => {
         const response = await api.post<Venta>('/ventas', data);
-        return response.data;
+        return mapVentaFromApi(response.data);
     },
     getSale: async (id: number) => {
         const response = await api.get<Venta>(`/ventas/${id}`);
-        return response.data;
+        return mapVentaFromApi(response.data);
     },
     getSalesCashCut: async (params: { from: string; to: string; method?: string }) => {
         const response = await api.get<SalesCashCutSummary>('/ventas/corte-caja', { params });
-        return response.data;
+        return {
+            ...response.data,
+            sales: response.data.sales?.map(mapVentaFromApi)
+        };
     },
     downloadSalesCashCutPdf: async (params: { from: string; to: string; method?: string }) => {
         const response = await api.get('/ventas/corte-caja/pdf', { params, responseType: 'blob' });
@@ -83,6 +99,11 @@ export const commercialService = {
     },
     updateSale: async (id: number, data: any) => {
         const response = await api.patch<Venta>(`/ventas/${id}`, data);
+        return mapVentaFromApi(response.data);
+    },
+
+    uploadPaymentDocument: async (pagoId: number, documentBase64: string) => {
+        const response = await api.post(`/ventas/pago/${pagoId}/document`, { document_base64: documentBase64 });
         return response.data;
     },
 
@@ -156,5 +177,11 @@ export const commercialService = {
     getReporteSemestral: async (anio?: number, semestre?: number) => {
         const response = await api.get('/reports/reporte-semestral', { params: { anio, semestre } });
         return response.data;
+    },
+
+    // Recurrente
+    generateQuickPayLink: async (data: { name: string, email: string, amount: number, concept?: string }) => {
+        const response = await api.post('/recurrente/quick-pay', data);
+        return response.data as { checkout_url: string };
     },
 };
