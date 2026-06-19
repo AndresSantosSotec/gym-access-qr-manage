@@ -217,6 +217,7 @@ export const membershipsService = {
     reference?: string,
     notes?: string,
     documentBase64?: string,
+    issueFel?: boolean,
   ) => {
     const response = await api.post(`/installments/${installmentId}/pay`, {
       amount,
@@ -224,6 +225,7 @@ export const membershipsService = {
       reference,
       notes,
       document_base64: documentBase64,
+      issue_fel: issueFel,
     });
     return response.data;
   },

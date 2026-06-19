@@ -1,4 +1,18 @@
 import { api } from './api.service';
+import { parseBlobJsonError } from '@/utils/downloadFile';
+
+export interface FelBillingData {
+  fel_status: 'certified' | 'failed' | 'skipped' | 'pending';
+  uuid?: string;
+  serie?: string;
+  numero?: string;
+  certified_at?: string;
+  receptor?: { id: string; name: string };
+  error?: string;
+  provider?: string;
+  skipped?: boolean;
+  reason?: string;
+}
 
 export interface Receipt {
   id: number;
@@ -20,7 +34,9 @@ export interface Receipt {
   invoiced_at?: string;
   email_sent_at?: string;
   description?: string;
-  details?: Record<string, any>;
+  details?: Record<string, any> & {
+    electronic_billing?: FelBillingData;
+  };
   client?: {
     id: number;
     name?: string;
@@ -29,6 +45,8 @@ export interface Receipt {
     last_name?: string;
     email: string;
     phone: string;
+    nit?: string;
+    dni?: string;
   };
   payment?: {
     id: number;
@@ -268,5 +286,127 @@ export const receiptsService = {
    */
   async delete(id: number): Promise<void> {
     await api.delete(`/receipts/${id}`);
+  },
+
+  async getFelStatus(): Promise<{
+    enabled: boolean;
+    provider: string;
+    use_test: boolean;
+    auto_certify_cash: boolean;
+    auto_certify_non_cash: boolean;
+  }> {
+    const response = await api.get('/fel/status');
+    return response.data;
+  },
+
+  async certifyFel(receiptId: number): Promise<any> {
+    const response = await api.post(`/fel/receipts/${receiptId}/certify`);
+    return response.data;
+  },
+
+  async downloadFelPdf(receiptId: number): Promise<Blob> {
+    return this.downloadFelFile(receiptId, 'pdf');
+  },
+
+  async downloadFelXml(receiptId: number): Promise<Blob> {
+    return this.downloadFelFile(receiptId, 'xml');
+  },
+
+  async downloadFelFile(receiptId: number, type: 'pdf' | 'xml'): Promise<Blob> {
+    const response = await api.client.get(`/fel/receipts/${receiptId}/${type}`, {
+      responseType: 'blob',
+      validateStatus: () => true,
+    });
+
+    const data = response.data as Blob;
+    if (response.status !== 200) {
+      const message = await parseBlobJsonError(data);
+      throw new Error(message || `No se pudo descargar el ${type.toUpperCase()} FEL`);
+    }
+
+    if (!(data instanceof Blob) || data.size === 0) {
+      throw new Error(`El archivo ${type.toUpperCase()} FEL está vacío`);
+    }
+
+    const mime = type === 'pdf' ? 'application/pdf' : 'application/xml';
+    return new Blob([data], { type: mime });
+  },
+
+  felDownloadFilename(receiptId: number, uuid: string | number | undefined, type: 'pdf' | 'xml'): string {
+    const id = uuid ? String(uuid).toUpperCase() : String(receiptId);
+    return `FEL-${id}.${type}`;
+  },
+
+  async voidFel(receiptId: number): Promise<any> {
+    const response = await api.post(`/fel/receipts/${receiptId}/void`);
+    return response.data;
+  },
+
+  async consultNit(nit: string): Promise<any> {
+    const response = await api.post('/fel/consult-nit', { nit });
+    return response.data;
+  },
+
+  async consultCui(cui: string): Promise<any> {
+    const response = await api.post('/fel/consult-cui', { cui });
+    return response.data;
+  },
+
+  async consultPhrases(nit: string): Promise<any> {
+    const response = await api.post('/fel/phrases', { nit });
+    return response.data;
+  },
+
+  async consultEstablishments(nit: string, establishmentId?: string): Promise<any> {
+    const response = await api.post('/fel/establishments', { nit, establishment_id: establishmentId });
+    return response.data;
+  },
+
+  async queryGuid(guid: string): Promise<any> {
+    const response = await api.post('/fel/query-guid', { guid });
+    return response.data;
+  },
+
+  async queryDateRange(filters: {
+    date_from: string;
+    date_to: string;
+    doc_type?: string;
+    buyer_nit?: string;
+    uuid?: string;
+    ref?: string;
+    status?: string;
+  }): Promise<any> {
+    const response = await api.post('/fel/query-date-range', filters);
+    return response.data;
+  },
+
+  async getPdfByGuid(guid: string): Promise<any> {
+    const response = await api.post('/fel/pdf-by-guid', { guid });
+    return response.data;
+  },
+
+  async voidByGuid(data: {
+    guid: string;
+    receptor_id: string;
+    fecha_emision: string;
+    motivo: string;
+  }): Promise<any> {
+    const response = await api.post('/fel/void-by-guid', data);
+    return response.data;
+  },
+
+  async certifyRawXml(xml: string): Promise<any> {
+    const response = await api.post('/fel/certify-raw-xml', { xml });
+    return response.data;
+  },
+
+  async getSamples(): Promise<any> {
+    const response = await api.get('/fel/samples');
+    return response.data;
+  },
+
+  async getSampleContent(category: string, filename: string): Promise<any> {
+    const response = await api.get(`/fel/samples/${category}/${filename}`);
+    return response.data;
   },
 };

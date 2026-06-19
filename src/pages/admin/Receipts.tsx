@@ -26,6 +26,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -50,12 +60,18 @@ import {
   CalendarBlank,
   Export,
   Trash,
+  Stamp,
+  FilePdf,
+  FileCode,
+  Prohibit,
 } from '@phosphor-icons/react';
+import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { receiptsService, type Receipt } from '@/services/receipts.service';
+import { receiptsService, type Receipt, type FelBillingData } from '@/services/receipts.service';
 import { can } from '@/services/permissions';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { downloadBlobFile } from '@/utils/downloadFile';
 
 /** Solo el admin puede borrar recibos/facturas (permiso ROLES_MANAGE = rol administrador) */
 const canDeleteReceipts = () => can('ROLES_MANAGE');
@@ -102,6 +118,14 @@ export function ReceiptsPage() {
     pending: 0,
     invoiced: 0,
   });
+
+  // ─── FEL State ───
+  const [felLoading, setFelLoading] = useState<number | null>(null);
+  const [felDialogOpen, setFelDialogOpen] = useState(false);
+  const [felResult, setFelResult] = useState<{ receipt: Receipt; fel: FelBillingData } | null>(null);
+  const [voidDialogOpen, setVoidDialogOpen] = useState(false);
+  const [voidTarget, setVoidTarget] = useState<Receipt | null>(null);
+  const [voiding, setVoiding] = useState(false);
 
   useEffect(() => {
     loadReceipts();
@@ -375,6 +399,121 @@ export function ReceiptsPage() {
     }
   };
 
+  // ─── FEL Handlers ───
+  const handleCertifyFel = async (receipt: Receipt) => {
+    if (felLoading) return;
+    setFelLoading(receipt.id);
+    try {
+      const result = await receiptsService.certifyFel(receipt.id);
+      const fel: FelBillingData = result?.fel ?? result;
+      // Refresh receipt to get updated details
+      const updated = await receiptsService.getById(receipt.id);
+      if (fel?.fel_status === 'certified') {
+        toast.success('¡Factura electrónica certificada exitosamente!');
+      } else {
+        toast.warning(fel?.error || 'FEL no pudo certificarse');
+      }
+      setFelResult({ receipt: updated, fel });
+      setFelDialogOpen(true);
+      loadReceipts();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.response?.data?.error || 'Error al certificar FEL');
+    } finally {
+      setFelLoading(null);
+    }
+  };
+
+  const handleDownloadFelPdf = async (receipt: Receipt) => {
+    try {
+      const blob = await receiptsService.downloadFelPdf(receipt.id);
+      const uuid = receipt.details?.electronic_billing?.uuid ?? receipt.id;
+      downloadBlobFile(blob, receiptsService.felDownloadFilename(receipt.id, uuid, 'pdf'));
+      toast.success('PDF FEL descargado');
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo descargar el PDF FEL del certificador');
+    }
+  };
+
+  const handleDownloadFelXml = async (receipt: Receipt) => {
+    try {
+      const blob = await receiptsService.downloadFelXml(receipt.id);
+      const uuid = receipt.details?.electronic_billing?.uuid ?? receipt.id;
+      downloadBlobFile(blob, receiptsService.felDownloadFilename(receipt.id, uuid, 'xml'));
+      toast.success('XML FEL descargado');
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo descargar el XML FEL del certificador');
+    }
+  };
+
+  const handleVoidFel = (receipt: Receipt) => {
+    setVoidTarget(receipt);
+    setVoidDialogOpen(true);
+  };
+
+  const confirmVoidFel = async () => {
+    if (!voidTarget) return;
+    setVoiding(true);
+    try {
+      const result = await receiptsService.voidFel(voidTarget.id);
+      if (result?.result?.success) {
+        toast.success('DTE FEL anulado correctamente');
+      } else if (result?.expected_in_pruebas || result?.result?.expected_in_pruebas) {
+        toast.warning(
+          result?.message ||
+            'Anulación rechazada por SAT en ambiente PRUEBAS. El XML se envió correctamente; en producción funcionará con DTEs reales.'
+        );
+      } else {
+        toast.warning(result?.result?.message || result?.result?.error || result?.message || 'No se pudo anular el DTE');
+      }
+      loadReceipts();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.response?.data?.error || 'Error al anular DTE FEL');
+    } finally {
+      setVoiding(false);
+      setVoidDialogOpen(false);
+      setVoidTarget(null);
+    }
+  };
+
+  /** Helper: obtiene datos FEL de un recibo */
+  const getFelData = (receipt: Receipt): FelBillingData | null =>
+    (receipt.details?.electronic_billing as FelBillingData) ?? null;
+
+  /** Helper: renderiza badge de estado FEL */
+  const FelBadge = ({ receipt }: { receipt: Receipt }) => {
+    const fel = getFelData(receipt);
+    if (!fel) return null;
+    if (fel.fel_status === 'certified') {
+      return (
+        <Badge className="bg-emerald-600 text-white text-[10px] gap-1 px-1.5 py-0.5">
+          <Stamp size={10} weight="fill" /> FEL
+        </Badge>
+      );
+    }
+    if (fel.fel_status === 'voided') {
+      return (
+        <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0.5 border-amber-500 text-amber-700">
+          <Prohibit size={10} weight="fill" /> FEL Anulado
+        </Badge>
+      );
+    }
+    if (fel.fel_status === 'failed') {
+      return (
+        <Badge variant="destructive" className="text-[10px] gap-1 px-1.5 py-0.5">
+          <XCircle size={10} weight="fill" /> FEL Error
+        </Badge>
+      );
+    }
+    if (fel.fel_status === 'skipped') {
+      return (
+        <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0.5 text-muted-foreground">
+          <Clock size={10} /> FEL N/A
+        </Badge>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
@@ -556,7 +695,10 @@ export function ReceiptsPage() {
                   receipts.map((receipt) => (
                     <TableRow key={receipt.id}>
                       <TableCell className="font-mono text-sm font-semibold">
-                        {receipt.receipt_number}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {receipt.receipt_number}
+                          <FelBadge receipt={receipt} />
+                        </div>
                       </TableCell>
                       <TableCell>{receipt.client?.full_name || receipt.client?.name || '-'}</TableCell>
                       <TableCell className="text-right font-bold">
@@ -640,6 +782,62 @@ export function ReceiptsPage() {
                               Descargar Ticket PDF
                             </DropdownMenuItem>
 
+                            {/* ─── FEL Actions ─── */}
+                            <DropdownMenuSeparator />
+
+                            {getFelData(receipt)?.fel_status !== 'certified' ? (
+                              <DropdownMenuItem
+                                onClick={() => handleCertifyFel(receipt)}
+                                disabled={felLoading === receipt.id}
+                                className="text-emerald-700 focus:text-emerald-700 focus:bg-emerald-50"
+                              >
+                                {felLoading === receipt.id ? (
+                                  <ArrowsClockwise className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Stamp className="w-4 h-4 mr-2" />
+                                )}
+                                {felLoading === receipt.id ? 'Certificando FEL...' : 'Facturar con FEL'}
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                disabled
+                                className="text-emerald-600 opacity-60"
+                              >
+                                <CheckCircle className="w-4 h-4 mr-2" weight="fill" />
+                                FEL Certificado ✓
+                              </DropdownMenuItem>
+                            )}
+
+                            {getFelData(receipt)?.uuid && (
+                              <>
+                                <DropdownMenuItem onClick={() => handleDownloadFelPdf(receipt)}>
+                                  <FilePdf className="w-4 h-4 mr-2" />
+                                  Descargar PDF FEL
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleDownloadFelXml(receipt)}>
+                                  <FileCode className="w-4 h-4 mr-2" />
+                                  Descargar XML FEL
+                                </DropdownMenuItem>
+                              </>
+                            )}
+
+                            {getFelData(receipt)?.uuid && getFelData(receipt)?.fel_status === 'certified' && (
+                              <DropdownMenuItem
+                                onClick={() => handleVoidFel(receipt)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Prohibit className="w-4 h-4 mr-2" />
+                                Anular DTE FEL
+                              </DropdownMenuItem>
+                            )}
+
+                            {getFelData(receipt)?.fel_status === 'voided' && (
+                              <DropdownMenuItem disabled className="opacity-60">
+                                <Prohibit className="w-4 h-4 mr-2" />
+                                DTE ya anulado
+                              </DropdownMenuItem>
+                            )}
+
                             {canDeleteReceipts() && (
                               <>
                                 <DropdownMenuSeparator />
@@ -664,6 +862,105 @@ export function ReceiptsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ─── FEL Result Dialog ─── */}
+      <Dialog open={felDialogOpen} onOpenChange={setFelDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {felResult?.fel?.fel_status === 'certified' ? (
+                <><CheckCircle className="w-5 h-5 text-emerald-600" weight="fill" /> Factura Electrónica Certificada</>
+              ) : (
+                <><XCircle className="w-5 h-5 text-destructive" weight="fill" /> Error en Certificación FEL</>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {felResult?.receipt?.receipt_number} — {felResult?.receipt?.client?.full_name || felResult?.receipt?.client?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          {felResult && (
+            <div className="space-y-3">
+              {felResult.fel.fel_status === 'certified' ? (
+                <>
+                  <div className="rounded-lg border bg-emerald-50 dark:bg-emerald-950/30 p-4 space-y-2">
+                    {felResult.fel.uuid && (
+                      <div className="space-y-0.5">
+                        <p className="text-xs text-muted-foreground font-medium">UUID del DTE</p>
+                        <p className="font-mono text-sm font-bold text-emerald-700 break-all">{felResult.fel.uuid}</p>
+                      </div>
+                    )}
+                    <Separator />
+                    <div className="grid grid-cols-2 gap-3">
+                      {felResult.fel.serie && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Serie</p>
+                          <p className="font-semibold text-sm">{felResult.fel.serie}</p>
+                        </div>
+                      )}
+                      {felResult.fel.numero && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Número</p>
+                          <p className="font-semibold text-sm">{felResult.fel.numero}</p>
+                        </div>
+                      )}
+                    </div>
+                    {felResult.fel.receptor && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Receptor</p>
+                        <p className="text-sm">{felResult.fel.receptor.id} — {felResult.fel.receptor.name}</p>
+                      </div>
+                    )}
+                    {felResult.fel.certified_at && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Certificado</p>
+                        <p className="text-sm">{new Date(felResult.fel.certified_at).toLocaleString('es-GT')}</p>
+                      </div>
+                    )}
+                  </div>
+                  <a
+                    href="https://app.corposistemasgt.com/invoice/login"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 text-sm text-blue-600 hover:underline"
+                  >
+                    <FileText size={14} /> Ver en portal Corpo Sistemas →
+                  </a>
+                </>
+              ) : (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+                  <p className="text-sm text-destructive font-medium">{felResult.fel.error || 'Error desconocido del certificador'}</p>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                {felResult.fel.uuid && (
+                  <>
+                    <button
+                      onClick={() => handleDownloadFelPdf(felResult.receipt)}
+                      className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted transition-colors"
+                    >
+                      <FilePdf size={14} /> PDF FEL
+                    </button>
+                    <button
+                      onClick={() => handleDownloadFelXml(felResult.receipt)}
+                      className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted transition-colors"
+                    >
+                      <FileCode size={14} /> XML FEL
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => setFelDialogOpen(false)}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium hover:bg-primary/90 transition-colors"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Preview Dialog */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
@@ -855,6 +1152,32 @@ export function ReceiptsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={voidDialogOpen} onOpenChange={setVoidDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Anular DTE FEL?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {voidTarget
+                ? `Se enviará la anulación del DTE del recibo ${voidTarget.receipt_number} a Corpo Sistemas/SAT. Esta acción es irreversible cuando la anulación es aceptada.`
+                : 'Confirmar anulación del documento electrónico.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={voiding}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={voiding}
+              onClick={(e) => {
+                e.preventDefault();
+                confirmVoidFel();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {voiding ? 'Anulando...' : 'Anular DTE'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

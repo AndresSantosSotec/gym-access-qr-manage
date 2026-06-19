@@ -49,6 +49,7 @@ const menuItems: MenuItem[] = [
   { to: '/admin/payments', icon: Money, label: 'Pagos', permission: 'PAYMENTS_VIEW' },
   { to: '/admin/checkins', icon: DoorOpen, label: 'Check-ins', permission: 'ACCESS_VIEW' },
   { to: '/admin/receipts', icon: Receipt, label: 'Recibos y Facturas', permission: 'PAYMENTS_VIEW' },
+  { to: '/admin/fel-playground', icon: Terminal, label: 'Pruebas FEL', permission: 'PAYMENTS_VIEW' },
   { to: '/admin/staff', icon: UserList, label: 'Personal y Staff', permission: 'USERS_VIEW' },
   { to: '/admin/productos', icon: Package, label: 'Productos', permission: 'PRODUCTS_VIEW' },
   { to: '/admin/inventario', icon: Warehouse, label: 'Inventario', permission: 'INVENTORY_VIEW' },

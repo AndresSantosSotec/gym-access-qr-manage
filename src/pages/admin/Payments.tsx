@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -35,6 +36,9 @@ import { clientsService } from '@/services/clients.service';
 import { can } from '@/services/permissions';
 import { formatCurrency, formatDate } from '@/utils/date';
 import { buildStorageUrl } from '@/utils/url.utils';
+
+/** Por defecto: efectivo no certifica FEL; tarjeta/transferencia sí. */
+const defaultIssueFel = (paymentMethod: string) => paymentMethod !== 'cash';
 import {
   CreditCard,
   Money,
@@ -183,6 +187,7 @@ function InstallmentsTab() {
     notes: '',
     transferDate: new Date().toISOString().split('T')[0],
     transferDocument: '',
+    issue_fel: false,
   });
   const [isPaying, setIsPaying] = useState(false);
   const [lastPayResult, setLastPayResult] = useState<any>(null);
@@ -305,6 +310,7 @@ function InstallmentsTab() {
       notes: '',
       transferDate: new Date().toISOString().split('T')[0],
       transferDocument: '',
+      issue_fel: false,
     });
     setRecurrenteCheckoutUrl(null);
     setPayDialogOpen(true);
@@ -325,9 +331,18 @@ function InstallmentsTab() {
         payForm.payment_method,
         finalReference,
         payForm.notes || undefined,
-        payForm.payment_method === 'transfer' && payForm.transferDocument ? payForm.transferDocument : undefined
+        payForm.payment_method === 'transfer' && payForm.transferDocument ? payForm.transferDocument : undefined,
+        payForm.issue_fel,
       );
-      toast.success(result.message || 'Pago registrado exitosamente');
+      if (result.fel?.fel_status === 'certified') {
+        toast.success('Pago registrado y factura electrónica certificada');
+      } else if (result.fel?.skipped) {
+        toast.success(result.message || 'Pago registrado (sin factura electrónica)');
+      } else if (result.fel?.fel_status === 'failed') {
+        toast.warning(`Pago registrado, pero FEL falló: ${result.fel?.error || 'revisa configuración'}`);
+      } else {
+        toast.success(result.message || 'Pago registrado exitosamente');
+      }
       setLastPayResult({ result, installment: selectedInstallment });
       setPayDialogOpen(false);
       setWhatsAppDialogOpen(true);
@@ -685,7 +700,7 @@ function InstallmentsTab() {
               <Label>Método de Pago *</Label>
               <Select
                 value={payForm.payment_method}
-                onValueChange={(v) => setPayForm({ ...payForm, payment_method: v })}
+                onValueChange={(v) => setPayForm({ ...payForm, payment_method: v, issue_fel: defaultIssueFel(v) })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -827,6 +842,24 @@ function InstallmentsTab() {
               </div>
             )}
 
+            <div className="flex items-start gap-3 rounded-lg border p-3 bg-muted/10">
+              <Checkbox
+                id="pay-issue-fel"
+                checked={payForm.issue_fel}
+                onCheckedChange={(checked) => setPayForm({ ...payForm, issue_fel: checked === true })}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="pay-issue-fel" className="cursor-pointer font-medium">
+                  Certificar factura electrónica (FEL)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {payForm.payment_method === 'cash'
+                    ? 'En efectivo normalmente no se factura. Activa solo si el cliente lo solicita.'
+                    : 'Se enviará a Corpo Sistemas / SAT con NIT o CUI del cliente.'}
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Notas (opcional)</Label>
               <Input
@@ -919,6 +952,7 @@ function PaymentsHistoryTab() {
     transaction_id: '',
     notes: '',
     document_base64: '',
+    issue_fel: false,
   });
   const [newPaymentRecurrenteUrl, setNewPaymentRecurrenteUrl] = useState<string | null>(null);
   const [isGeneratingNewPaymentLink, setIsGeneratingNewPaymentLink] = useState(false);
@@ -958,7 +992,9 @@ function PaymentsHistoryTab() {
 
   useEffect(() => {
     if (!filterDate) {
-      api.get('/payments/revenue').then((res) => setTotalRevenueAll(res.data.total_revenue ?? 0)).catch(() => setTotalRevenueAll(null));
+      api.get('/payments/revenue', { timeout: 45000 })
+        .then((res) => setTotalRevenueAll(res.data.total_revenue ?? 0))
+        .catch(() => setTotalRevenueAll(null));
     }
   }, [filterDate]);
 
@@ -970,7 +1006,7 @@ function PaymentsHistoryTab() {
     if (filterDate || filterDateTo) {
       const from = filterDate || filterDateTo;
       const to = filterDateTo || filterDate || filterDateTo;
-      api.get('/payments/revenue', { params: { from, to } })
+      api.get('/payments/revenue', { params: { from, to }, timeout: 45000 })
         .then((res) => setRevenueByDay(res.data))
         .catch(() => setRevenueByDay(null));
     } else {
@@ -1076,7 +1112,7 @@ function PaymentsHistoryTab() {
   const loadPayments = async () => {
     try {
       setIsLoading(true);
-      const effectivePerPage = perPage === 9999 ? 9999 : perPage;
+      const effectivePerPage = perPage === 500 ? 500 : perPage;
       const params: Record<string, string | number> = { page, per_page: effectivePerPage };
       if (filterDate && filterDateTo) {
         params.date_from = filterDate;
@@ -1085,13 +1121,14 @@ function PaymentsHistoryTab() {
         params.date = filterDate;
       }
       if (filterPaymentMethod) params.method = filterPaymentMethod;
-      const response = await api.get('/payments', { params });
+      const response = await api.get('/payments', { params, timeout: 45000 });
       const data = response.data;
       setPayments(data.data || []);
       setTotalItems(data.total ?? 0);
       setLastPage(data.last_page ?? 1);
-    } catch (e) {
-      toast.error('Error al cargar pagos');
+    } catch (e: any) {
+      const isTimeout = e?.code === 'ECONNABORTED' || e?.message?.includes('timeout');
+      toast.error(isTimeout ? 'La conexión tardó demasiado. Intenta con un rango de fechas más corto.' : 'Error al cargar pagos');
       setPayments([]);
     } finally {
       setIsLoading(false);
@@ -1114,17 +1151,18 @@ function PaymentsHistoryTab() {
         notes: newPaymentForm.notes || undefined,
         document_base64: newPaymentForm.document_base64 || undefined,
         status: 'completed',
+        issue_fel: newPaymentForm.issue_fel,
       });
 
-      const paymentId = paymentResponse.data.id;
-
-      // Create receipt automatically
-      try {
-        await receiptsService.createFromPayment(paymentId, 'receipt', 'individual_payment');
+      const fel = paymentResponse.data?.fel;
+      if (fel?.fel_status === 'certified') {
+        toast.success('Pago registrado y factura electrónica certificada');
+      } else if (fel?.skipped) {
+        toast.success('Pago registrado (sin factura electrónica)');
+      } else if (fel?.fel_status === 'failed') {
+        toast.warning(`Pago registrado, pero FEL falló: ${fel?.error || 'revisa configuración'}`);
+      } else {
         toast.success('Pago registrado y recibo generado');
-      } catch (receiptError) {
-        console.error('Error creating receipt:', receiptError);
-        toast.success('Pago registrado (recibo no generado)');
       }
 
       setNewPaymentOpen(false);
@@ -1135,6 +1173,7 @@ function PaymentsHistoryTab() {
         transaction_id: '',
         notes: '',
         document_base64: '',
+        issue_fel: false,
       });
       setNewPaymentRecurrenteUrl(null);
       loadPayments();
@@ -1680,9 +1719,9 @@ function PaymentsHistoryTab() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm text-muted-foreground">Filas por página</span>
               <Select
-                value={perPage === 9999 ? 'all' : String(perPage)}
+                value={perPage === 500 ? 'all' : String(perPage)}
                 onValueChange={(v) => {
-                  setPerPage(v === 'all' ? 9999 : Number(v));
+                  setPerPage(v === 'all' ? 500 : Number(v));
                   setPage(1);
                 }}
               >
@@ -1702,8 +1741,8 @@ function PaymentsHistoryTab() {
                 {totalItems === 0
                   ? '0 resultados'
                   : (() => {
-                      const from = (page - 1) * (perPage === 9999 ? totalItems : perPage) + 1;
-                      const to = perPage === 9999 ? totalItems : Math.min(page * perPage, totalItems);
+                      const from = (page - 1) * (perPage === 500 ? totalItems : perPage) + 1;
+                      const to = perPage === 500 ? totalItems : Math.min(page * perPage, totalItems);
                       return `Mostrando ${from} a ${to} de ${totalItems} resultado${totalItems !== 1 ? 's' : ''}`;
                     })()}
               </span>
@@ -1762,11 +1801,11 @@ function PaymentsHistoryTab() {
                         <SelectItem key={c.id} value={c.id.toString()}>
                           <div className="flex flex-col text-left">
                             <span>{c.first_name} {c.last_name}</span>
-                            {(c.email || c.document_number || c.cui) && (
-                              <span className="text-xs text-muted-foreground block mt-0.5">
-                                {c.email || c.document_number || c.cui}
-                              </span>
-                            )}
+                            <span className="text-xs text-muted-foreground block mt-0.5">
+                              {[c.nit ? `NIT: ${c.nit}` : null, c.email, c.document_number, c.cui]
+                                .filter(Boolean)
+                                .join(' · ') || 'Sin NIT'}
+                            </span>
                           </div>
                         </SelectItem>
                       ))
@@ -1790,7 +1829,7 @@ function PaymentsHistoryTab() {
 
             <div className="space-y-2">
               <Label>Método de Pago</Label>
-              <Select value={newPaymentForm.payment_method} onValueChange={(v) => setNewPaymentForm({ ...newPaymentForm, payment_method: v })}>
+              <Select value={newPaymentForm.payment_method} onValueChange={(v) => setNewPaymentForm({ ...newPaymentForm, payment_method: v, issue_fel: defaultIssueFel(v) })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona método" />
                 </SelectTrigger>
@@ -1875,6 +1914,24 @@ function PaymentsHistoryTab() {
                 onChange={(e) => setNewPaymentForm({ ...newPaymentForm, transaction_id: e.target.value })}
                 placeholder="Nº de transacción, recibo, etc."
               />
+            </div>
+
+            <div className="flex items-start gap-3 rounded-lg border p-3 bg-muted/10">
+              <Checkbox
+                id="new-pay-issue-fel"
+                checked={newPaymentForm.issue_fel}
+                onCheckedChange={(checked) => setNewPaymentForm({ ...newPaymentForm, issue_fel: checked === true })}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="new-pay-issue-fel" className="cursor-pointer font-medium">
+                  Certificar factura electrónica (FEL)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {newPaymentForm.payment_method === 'cash'
+                    ? 'En efectivo normalmente no se factura. Activa solo si el cliente lo solicita.'
+                    : 'Se enviará a Corpo Sistemas / SAT con NIT o CUI del cliente.'}
+                </p>
+              </div>
             </div>
 
             <div className="space-y-2">

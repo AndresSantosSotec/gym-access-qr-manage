@@ -13,6 +13,7 @@ import { Settings } from '@/pages/admin/Settings';
 import { Leads } from '@/pages/admin/Leads';
 import { Payments } from '@/pages/admin/Payments';
 import { ReceiptsPage } from '@/pages/admin/Receipts';
+import { FelPlayground } from '@/pages/admin/FelPlayground';
 import { SiteSettings } from '@/pages/admin/SiteSettings';
 import { BlogAdmin } from '@/pages/admin/BlogAdmin';
 import { Roles } from '@/pages/admin/Roles';
@@ -119,6 +120,7 @@ function App() {
           <Route element={<PermissionGuard permission="PAYMENTS_VIEW" />}>
             <Route path="payments" element={<Payments />} />
             <Route path="receipts" element={<ReceiptsPage />} />
+            <Route path="fel-playground" element={<FelPlayground />} />
           </Route>
 
           <Route element={<PermissionGuard permission="ACCESS_VIEW" />}>
